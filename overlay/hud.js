@@ -61,11 +61,13 @@
   }
 
   function stats(m) {
-    if (typeof m.game === 'string') $('s-game').textContent = clean(m.game, 16).toUpperCase();
+    // "HOUSEBETS WHEEL" wrapped onto two lines in the console strip: the brand is on screen anyway.
+    if (typeof m.game === 'string') $('s-game').textContent = clean(m.game.replace(/^\s*housebets\s+/i, ''), 16).toUpperCase();
     const rounds = finite(m.rounds, 0, 1e9);
     if (rounds !== null) $('s-rounds').textContent = Math.round(rounds).toLocaleString('en-US');
     const best = finite(m.best, 0, 1e9);
-    if (best !== null) $('s-best').textContent = best.toFixed(2) + '×';
+    // Big records read better without the decimals (and fit): 13,188× rather than 13188.31×.
+    if (best !== null) $('s-best').textContent = (best >= 1000 ? Math.round(best).toLocaleString('en-US') : best.toFixed(2)) + '×';
     const streak = finite(m.streak, -1e6, 1e6);
     if (streak !== null) {
       const el = $('s-streak');
@@ -77,7 +79,8 @@
       const l = m.ladder && typeof m.ladder === 'object' ? m.ladder : null;
       const u = l ? finite(l.units, 0, 1e9) : null, left = l ? finite(l.left, 0, 1000) : null;
       $('s-ladder-box').style.display = l ? '' : 'none';
-      if (u !== null) $('s-ladder').textContent = (u >= 100 ? Math.round(u) : Math.round(u * 10) / 10) + 'u' + (left !== null ? ' · ' + left + ' left' : '');
+      const short = u >= 1e6 ? (u / 1e6).toFixed(1) + 'M' : u >= 1000 ? (u / 1000).toFixed(u >= 1e4 ? 0 : 1) + 'k' : u >= 100 ? Math.round(u) : Math.round(u * 10) / 10;
+      if (u !== null) $('s-ladder').textContent = short + 'u' + (left !== null ? ' · ' + left + ' left' : '');
     }
     // Real-site games play $0 bets and send no balance: the stat is hidden (it also frees room).
     const bal = finite(m.balance, -1e12, 1e12);

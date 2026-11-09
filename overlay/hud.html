@@ -114,10 +114,11 @@
   body.room #vote .cmdhead { width: 100%; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--cyan); }
   body.room .auto { flex-direction: column; white-space: nowrap; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; line-height: 1.35;
                     padding: 0 22px; border-left: 2px solid rgba(251, 238, 224, .25); border-right: 2px solid rgba(251, 238, 224, .25); }
-  body.room #stats { gap: 14px; padding: 0 16px; }
-  body.room #stats .game { font-size: 26px; }
-  body.room #stats .val { font-size: 22px; }
-  body.room #stats .label { font-size: 12px; }
+  body.room #stats { gap: 10px; padding: 0 12px; overflow: hidden; }
+  body.room #stats .game { font-size: 26px; white-space: nowrap; }
+  body.room #stats .stat { white-space: nowrap; }
+  body.room #stats .val { font-size: 21px; }
+  body.room #stats .label { font-size: 11px; }
   body.room #live { font-size: 24px; }
   /* Room layout: no separate commands box for now; a one-line vote hint closes the chat panel. */
   body.room #vote { display: none; }
@@ -162,7 +163,7 @@
     <div class="stat"><span class="label">Rounds</span><span class="val" id="s-rounds">0</span></div>
     <div class="stat"><span class="label">Best</span><span class="val win" id="s-best">-</span></div>
     <div class="stat"><span class="label">Streak</span><span class="val" id="s-streak">-</span></div>
-    <div class="stat" id="s-ladder-box" style="display:none"><span class="label">Auto bet</span><span class="val win" id="s-ladder">-</span></div>
+    <div class="stat" id="s-ladder-box" style="display:none"><span class="label">Bet</span><span class="val win" id="s-ladder">-</span></div>
     <div class="stat"><span class="label"><span class="default-only">Demo balance</span><span class="room-only">Balance</span></span><span class="val" id="s-balance">-</span></div>
   </div>
   <div id="vote" class="card">
