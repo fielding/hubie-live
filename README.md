@@ -154,13 +154,13 @@ After changing scene or HUD files, select the browser source and click **Refresh
 
 | Chat | Does |
 |---|---|
-| `!tower` `!road` `!plinko` `!dice` `!limbo` `!flip` `!wheel` `!hilo` `!maxwin` `!mines` | vote for the next game (60 s poll) |
+| `!tower` `!road` `!plinko` `!limbo` `!flip` `!wheel` `!hilo` `!maxwin` `!mines` | vote for the next game (60 s poll) |
 | `!mines 1-24` | pick the next Mines round's mine count |
 | `!song` / `!track`, `!next`, `!skip` | current track (NCS credit), up next, vote to skip |
 | `!commands`, `!record`, `!uptime`, `!rules` | the basics |
 | say "Hubie" | he answers |
 
-Keno is off the vote menu for now: its page reloads itself under load.
+Dice and Keno are off the vote menu for now: Housebets changed how their pages take input mid-contest, and they're being reworked.
 
 ## Configuration
 

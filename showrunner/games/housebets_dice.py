@@ -23,7 +23,9 @@ class HousebetsDice(HousebetsGame):
     id = "dice"
     slug = "dice"
     title = "HOUSEBETS DICE"
-    command = "!dice"
+    # Off the menu 2026-11-08 20:30: after a fresh page load the game stopped taking the typed win
+    # chance (payout never left 2x, even with retries). Debug off-stream, then restore "!dice".
+    command = ""
     max_multiplier = 9.9        # his lowest win chance is 10% -> 9.9x
     ready_selector = SEL["chance"]
     brief = ("Housebets Dice (real site, zero-value bets): pick a win chance and roll over or under. Lower "
