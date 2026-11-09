@@ -1,5 +1,6 @@
 """Housebets Dice on the real site (extension/), $0 bets only. Selectors learned from page
 snapshots on 2026-11-07: the result appears as a history chip "Win|Loss, rolled 72.10"."""
+import asyncio
 import re
 
 from .housebets import HousebetsGame, SiteError
@@ -74,9 +75,19 @@ class HousebetsDice(HousebetsGame):
                 return float(got[0]["value"]) if got else 0.0
             except (TypeError, ValueError):
                 return 0.0
-        if abs(await payout() - want) > 0.02:
+        # Right after the page loads, the game ignores the first input or two (its controls aren't
+        # wired yet): set it again until the payout shows it took.
+        for attempt in range(4):
+            if abs(await payout() - want) <= 0.02:
+                break
             await self.set_value(SEL["chance"], chance)
-            await self.until(payout, lambda m: abs(m - want) <= 0.02, f"the {want:g}x payout", timeout=3)
+            try:
+                await self.until(payout, lambda m: abs(m - want) <= 0.02, f"the {want:g}x payout", timeout=2)
+                break
+            except SiteError:
+                if attempt == 3:
+                    raise
+                await asyncio.sleep(1.0)
         await self.assert_zero_bet()
         chip = await self.bet_and_read(SEL["bet"], SEL["chips"])
         result = chip["attrs"].get("aria-label", "")
