@@ -118,7 +118,7 @@ ignore_users = ["homiehubie", "botrix", "kickbot"]   # accounts never shown on s
 # Text commands the bot answers in Kick chat (edit live). Keep "!" count low: Kick rejects messages
 # with many special characters. !commands, !games, !record and !uptime are built in.
 [kickbot.commands]
-"!housebets" = "Hubie plays Housebets originals. Play here: https://www.housebets.com/r/fielding (18+, gamble responsibly)"
+"!housebets" = "Hubie plays the Housebets house originals in demo play, zero-value bets only. 18+, gamble responsibly."
 "!socials" = "Fielding: https://justfielding.com"
 "!selv" = "SELV: a self-custodial crypto wallet with built-in social commands. Your keys stay on your device. https://selvwallet.com (beta)"
 

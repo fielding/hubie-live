@@ -5,6 +5,8 @@ He plays the real [Housebets](https://www.housebets.com) originals in a Chrome w
 $0, checked before each click), talks with an AI voice, trash-talks chat, takes votes, and keeps the
 show going through site outages without a human touching anything.
 
+**Setup in one page: [SETUP.md](SETUP.md).** Agents and tools diagram: [How it works](#how-it-works).
+
 ## What he does
 
 - **Plays real games:** Dice, Limbo, Coin Flip, Wheel, Plinko, Keno, Max Win, Mines, HiLo, Dragon
@@ -40,27 +42,55 @@ show going through site outages without a human touching anything.
 
 ## How it works
 
-```
-Kick chat ──► showrunner (Python, asyncio) ──► Venice: brain, voice, safety classifier
-                 │        │         │
-                 │        │         └──► OBS websocket: replay-buffer clips
-                 │        └──► Kick bot (official API): replies, moderation
-                 ▼
-   ws :8768 ◄──► Chrome extension ──► the real Housebets game tab (reads + clicks)
-   ws :8765/6/7 ──► stage/live.html in OBS: room art, puppet (Hubie), HUD, game overlays
+```mermaid
+flowchart LR
+  subgraph Inputs
+    KC[Kick chat<br/>Centrifugo websocket]
+    HB[Housebets game tab<br/>real site, $0 bets]
+  end
+  subgraph Showrunner["Show runner (Python asyncio)"]
+    GL[Game loop<br/>fast play, auto sessions,<br/>rotation, recovery]
+    BR[Brain agent<br/>plans rounds, reacts,<br/>answers chat]
+    SF[Safety agent<br/>chat classifier, injection filter,<br/>output check]
+    MOD[Moderator<br/>delete / timeout]
+    WD[Watchdogs<br/>frozen screen, site reloads,<br/>offline card, crash restart]
+    CL[Clipper<br/>big hits]
+  end
+  subgraph Venice["Venice API"]
+    LLM[DeepSeek V4.1 Flash<br/>fallback Qwen3 235B]
+    TTS[ElevenLabs Turbo v2.5<br/>voice: Theo Silk]
+    JEV[Classifier<br/>decisions]
+  end
+  EXT[Chrome extension<br/>reads + clicks the game]
+  BOT[Kick bot<br/>official API]
+  OBS[OBS: stage page + window capture<br/>replay buffer, Kick stream]
+  STG[Stage page<br/>puppet + lip sync, HUD,<br/>music, cards]
+
+  KC --> SF --> BR
+  SF --> MOD --> BOT
+  GL <--> EXT <--> HB
+  GL --> BR --> LLM
+  BR --> TTS --> STG
+  SF --> JEV
+  GL --> STG
+  WD --> EXT
+  CL --> OBS
+  BR --> BOT
+  STG --> OBS
 ```
 
-| Part | Where |
-|---|---|
-| Show runner: brain, safety, chat, votes, fast play | `showrunner/` |
-| Live config, re-read while streaming | `showrunner/config.toml` |
-| Real-site game plugins, hot-reloaded | `showrunner/games/housebets_*.py` |
-| Chrome extension that plays the site | `extension/` |
-| Puppet: Hubie, lip sync, faces | `puppet/` ([README](puppet/README.md)) |
-| Stream scene, music player | `stage/live.html` |
-| HUD: chat, stats, alerts | `overlay/` |
-| Art pipeline (face parts, desk props) | `assets/desk/`, `tools/gen_faces.py` |
-| Music fetcher (NCS) | `tools/ncs_fetch.py` |
+**Agents and tools**
+
+| Agent / tool | Job | Built with |
+|---|---|---|
+| Brain | plans each round or auto session, writes reactions, answers chat by name with per-viewer memory | DeepSeek V4.1 Flash via Venice (Qwen3 235B fallback), JSON-schema tool calls |
+| Safety | scores every chat message (injection, harassment, spam, gambling harm), checks every line before it's voiced | Venice decisions classifier + regex rules |
+| Moderator | deletes links, injection attempts and hate; times out repeat offenders | Kick official API (bot account) |
+| Voice | voices lines, caches them, levels loudness | ElevenLabs Turbo v2.5 (Theo Silk) via Venice, ffmpeg |
+| Puppet | animated Hubie from the official art: lip sync, blinks, expressions, reactions | Canvas 2D, Rhubarb Lip Sync, face parts made with Venice image edits |
+| Player | drives the real games: picks, bets, reads results, fails closed on any non-zero bet | Chrome extension (MV3) over a local websocket |
+| Watchdogs | spot a dead or frozen game window, site reloads, offline games; recover without a human | macOS window capture, page reload, game rotation |
+| Clipper | saves big hits as 16:9 and vertical 9:16 clips | OBS websocket + replay buffer, ffmpeg, Pillow |
 
 ## Requirements
 
@@ -148,12 +178,36 @@ No music ships with the repo. `tools/ncs_fetch.py` downloads [NoCopyrightSounds]
 tracks, which are free to stream with credit, into `assets/music/`, with their track pages recorded so
 the HUD and `!song` can credit each one.
 
+## Stack
+
+- **Models:** DeepSeek V4.1 Flash (primary) and Qwen3 235B Instruct (fallback) for the brain; Venice's
+  decisions classifier for safety; all through the [Venice API](https://venice.ai).
+- **Voice:** ElevenLabs Turbo v2.5, voice "Theo Silk", through Venice.
+- **Animation:** our own Canvas 2D puppet; [Rhubarb Lip Sync](https://github.com/DanielSWolf/rhubarb-lip-sync)
+  for mouth shapes; face parts and poses generated from the official Hubie art with Venice image edits
+  (Flux), cut into layers by `assets/desk/layers/cut_faces.py`.
+- **Streaming:** OBS (browser sources + window capture, replay buffer) to Kick; Kick official API for the bot.
+- **Plumbing:** Python 3.13 (asyncio, websockets, httpx), a Chrome MV3 extension, ffmpeg, pyobjc (Quartz).
+- **Music:** NoCopyrightSounds (credited on stream).
+- **Templates or kits:** none; everything here was written for this project.
+
+## Staying safe on air
+
+| Rule | How |
+|---|---|
+| Demo play only, no real money | every bet is $0, checked right before each click; a non-zero amount stops the game |
+| 18+ and gamble responsibly on screen | a permanent "18+ · Gamble responsibly · Demo play, $0 bets" badge, plus a spoken reminder every 15 min |
+| Never promises wins or pushes deposits | the persona forbids it; every line passes an output check that blocks guaranteed-win talk and pushing real-money play |
+| Moderates chat | the safety agent screens every message; the bot deletes links, injection attempts and hate, and times out repeat offenders |
+| Prompt injection | regex rules plus a separate "steering" score; chat is always passed to the model as quoted viewer content, never as instructions |
+
 ## Notes
 
 - **Bets:** every bet is $0. Each game checks the bet amount right before clicking and fails closed.
   This is entertainment, not gambling advice, and the stream is 18+.
+- **License:** all rights reserved; shared as a Housebets contest entry (see `LICENSE`).
 - **Secrets:** API keys come from the environment (or 1Password via `op`) and are never written to disk.
   Kick bot tokens live in `showrunner/.kick_tokens.json` (gitignored, mode 600).
-- **AI assets:** the art and face parts were generated with Venice image models from a single
-  hand-picked concept (`Dapper Sloth at the Desk.png`). `tools/gen_faces.py` rebuilds new face
+- **AI assets:** the desk scene, face parts and poses were generated with Venice image models
+  from the official Hubie art (`Dapper Sloth at the Desk.png` is the concept the scene is built on). `tools/gen_faces.py` rebuilds new face
   parts the same way.
