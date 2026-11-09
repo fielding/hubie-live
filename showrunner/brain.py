@@ -4,6 +4,9 @@ import json
 import logging
 import os
 
+import collections
+import re
+
 import httpx
 
 from . import venice
@@ -21,6 +24,27 @@ def _nullable_enum(values):
     return {"anyOf": [{"type": "null"}, {"enum": values}]}
 
 
+_STOP = set("a an the and or but so to of in on at for with is it it's i i'm im my me you your this that "
+             "just now and then off be are was were we do got get go going one up out all".split())
+
+
+def overused(lines, at_least: int = 2, limit: int = 10) -> list[str]:
+    """Two- and three-word phrases that keep coming back in these lines (each counted once per line)."""
+    counts: collections.Counter = collections.Counter()
+    for line in lines:
+        words = re.findall(r"[a-z][a-z']*", line.lower())
+        grams = set()
+        for n in (2, 3):
+            for i in range(len(words) - n + 1):
+                g = words[i:i + n]
+                if sum(w not in _STOP for w in g) >= (1 if n == 2 else 2) and g[0] not in _STOP and g[-1] not in _STOP:
+                    grams.add(" ".join(g))
+        counts.update(grams)
+    common = [g for g, c in counts.most_common() if c >= at_least]
+    # Drop a two-word phrase already covered by a three-word one.
+    return [g for g in common if not any(g != h and g in h for h in common)][:limit]
+
+
 class Brain:
     """Two roles with separate model lists (config.toml [models]): "game" for fast, frequent
     tool-calling turns, "chat" for personality (chat replies, announcements)."""
@@ -30,6 +54,9 @@ class Brain:
         self._client = httpx.AsyncClient(timeout=12.0)
         # The stream-wide goal (set by the runner): the multiplier record to beat.
         self.goal = ""
+        # Hubie's own recent lines on air (set by the runner). Every call sees them, so a fast
+        # model stops falling back on the same openers, jokes and swears.
+        self.said: collections.deque = collections.deque(maxlen=12)
 
     async def _ask(self, role: str, user: str, schema: dict) -> dict | None:
         key = os.environ.get("VENICE_API_KEY")
@@ -45,7 +72,8 @@ class Brain:
                 async with venice.slot():
                     r = await self._client.post(API, timeout=timeout, headers={"Authorization": f"Bearer {key}"}, json={
                         "model": model, "max_tokens": 220, "temperature": cfg.temperature,
-                        "messages": [{"role": "system", "content": cfg.persona}, {"role": "user", "content": user}],
+                        "messages": [{"role": "system", "content": cfg.persona},
+                                     {"role": "user", "content": user + self._freshness()}],
                         "response_format": {"type": "json_schema",
                                             "json_schema": {"name": "turn", "strict": True, "schema": schema}},
                         "venice_parameters": {"include_venice_system_prompt": False, "disable_thinking": True}})
@@ -57,6 +85,17 @@ class Brain:
             except Exception as e:
                 log.warning("brain call to %s failed: %s", model, type(e).__name__)
         return None
+
+    def _freshness(self) -> str:
+        if not self.said:
+            return ""
+        out = (f"\n\nYour last lines on air, newest last: {json.dumps(list(self.said))}\nSay something that sounds "
+               "different from all of them: a new opener, a new image or joke, a different swear (or none), "
+               "different sentence shape. Never reuse a phrase from them.")
+        worn = overused(self.said)
+        if worn:
+            out += f" Worn out right now, don't say: {json.dumps(worn)}."
+        return out
 
     async def game_turn(self, game, recent: list[str]) -> dict | None:
         """Pick one legal action and optionally say a line. Returns a validated dict or None."""

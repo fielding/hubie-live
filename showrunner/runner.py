@@ -36,13 +36,42 @@ SCREEN_CHECK_S = 10
 # Reload the game page this often, between rounds, so it never goes stale. (Housebets also reloads
 # its own page at irregular times, 13-35 min apart on 2026-11-08; games retry through those.)
 PAGE_REFRESH_S = 3 * 3600
-CHECK_IN_ANGLES = ("how this session is going", "something a chatter said earlier, or ask chat something",
-                   "chasing the stream record", "life on Fielding's couch", "the music that's playing",
-                   "this game itself and why you like or hate it", "a hot take about degen life")
+CHECK_IN_ANGLES = ("how this session is going, in one vivid image", "something a chatter said earlier",
+                   "chasing the stream record", "a small detail of life on the couch (the snacks, the cat, the remote)",
+                   "the music that's playing", "this game itself and why you like or hate it",
+                   "a ridiculous superstition you're trying right now", "what you'd buy with the record if it were real",
+                   "a fake sponsor you'd love to have", "your rival (an imaginary rich sloth named Reginald)",
+                   "what your top hat has seen", "a dramatic movie-trailer voice description of this session",
+                   "giving chat a one-line life lesson that is clearly terrible advice",
+                   "a confession about your worst habit", "rating the last few minutes like a sports commentator",
+                   "a weird thought you just had about the game's design", "what you'd name this session if it were an album")
 CHAT_ANGLES = ("a question for chat about their night", "calling out the lurkers to say hi",
-               "a would-you-rather for chat", "asking chat for a song or a hot take", "roasting a recent chatter (playfully)",
-               "asking chat to pick your next game with a vote", "a story about life on Fielding's couch, then ask chat theirs",
-               "asking chat what they'd do with your record multiplier")
+               "a would-you-rather for chat", "asking chat for a song recommendation", "roasting a recent chatter (playfully)",
+               "asking chat to pick your next game with a vote", "asking chat about their best ever win at anything",
+               "asking chat what they'd do with your record multiplier", "a this-or-that (two silly options) for chat",
+               "asking chat to guess the next result", "asking chat for a nickname for your top hat",
+               "asking chat what snack you should get", "asking chat what time it is where they are",
+               "asking chat to rate the current track out of ten", "asking chat for their most controversial food opinion",
+               "challenging chat to type a word in chat if they're actually awake",
+               "asking chat what game they'd add to the rotation", "asking chat for a dare (a safe, silly one)",
+               "asking a recent chatter a follow-up about something they said")
+
+
+class _Bag:
+    """Draws every item once, in random order, before any repeats (random.choice repeated itself a lot)."""
+    def __init__(self):
+        self._left: dict[tuple, list] = {}
+
+    def draw(self, items):
+        key = tuple(items)
+        if not self._left.get(key):
+            self._left[key] = random.sample(key, len(key))
+        return self._left[key].pop()
+
+
+BAG = _Bag()
+
+
 def _either(*events: asyncio.Event) -> asyncio.Event:
     """An event that is set once any of these is (checked when a line is ready, so a cheap view)."""
     class Either:
@@ -205,6 +234,7 @@ class Runner:
             log.info("HUBIE: %s", line)
             if not noted:
                 self.recent.append(f"Hubie said: {line}")
+            self.brain.said.append(line)
             ok = await self.puppet.say(clips, expression)
             self._last_line_at = time.time()
             self._relax_face(expression)
@@ -542,10 +572,10 @@ class Runner:
             cfg = self.config.current
             lines = (cfg.catchphrases or {}).get(ev["kind"])
             # Fast play busts a lot (Master tower: most rounds end on the first pick), so the chance
-            # alone would make it a running gag every few seconds: at most one a minute.
-            if lines and random.random() < cfg.catchphrase_chance and time.time() - self._catch_at > 60:
+            # alone would make it a running gag every few seconds: at most one every few minutes.
+            if lines and random.random() < cfg.catchphrase_chance and time.time() - self._catch_at > 180:
                 self._catch_at = time.time()
-                self._in_background(self.speak(random.choice(lines), "laugh", self._default_reaction(ev), checked=True))
+                self._in_background(self.speak(BAG.draw(lines), "laugh", self._default_reaction(ev), checked=True))
             await asyncio.sleep(0.6)
 
     def _in_background(self, coro):
@@ -654,12 +684,12 @@ class Runner:
                         # Chat time: no spin counts to narrate, a nudge to get chat talking instead.
                         names = list(dict.fromkeys(line.split(":", 1)[0] for _, line in reversed(self.chat_log)))[:4]
                         check = {"kind": "chat_time", "recent_chatters": names,
-                                 "talk_about": random.choice(CHAT_ANGLES),
+                                 "talk_about": BAG.draw(CHAT_ANGLES),
                                  "note": "Don't recap spins, droughts or the wheel. Talk TO chat: ask something, "
                                          "call a recent chatter out by name, or start a bit they can answer."}
                     else:
                         check = {"kind": "check_in", "bets_so_far": played, "best_hit_so_far": best_hit,
-                                 "talk_about": random.choice(CHECK_IN_ANGLES)}
+                                 "talk_about": BAG.draw(CHECK_IN_ANGLES)}
                         if getattr(g, "streak_talk", True):
                             check.update(wins=wins, biggest_bet_units=round(peak_units, 2), bets_since_last_win=dry)
                     self._in_background(self._talk(g, check))
@@ -1204,7 +1234,7 @@ class Runner:
             if seg.chat and self.kick:
                 self.kick.say(seg.chat)
             started = time.time()
-            await self.speak(random.choice(seg.say), seg.expression, seg.reaction, checked=True)
+            await self.speak(BAG.draw(seg.say), seg.expression, seg.reaction, checked=True)
             await asyncio.sleep(max(0.0, seg.seconds - (time.time() - started)))
             return
 

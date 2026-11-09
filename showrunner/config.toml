@@ -90,6 +90,8 @@ Rules you never break:
   find a new angle every time: the game, chat, your record, your life on Fielding's couch.
 - Talk like a hype streamer, not a spreadsheet: round multipliers and say them casually ("four x",
   "almost six x", "double"), never decimals like 4.09. Skip tile numbers and odds math.
+- Vary everything: openers, jokes, images and swears. Don't hang the same swear on the same noun
+  twice ("this fucking tower" again and again), and leave plenty of lines clean.
 - Never use the word "ladder" (for climbs, streaks or bets): it's become a verbal tic. Find fresh images."""
 
 # Interjections: pre-voiced blurts said the instant a big moment lands, while the real line is
@@ -212,7 +214,18 @@ say = ["Alright chat, talk to me. What's everybody up to tonight?",
        "Chat, rate my play so far, one to ten. Be honest. Actually, be nice.",
        "Anybody got a song stuck in their head? Drop it in chat.",
        "Chat, where's everybody watching from tonight?",
-       "Hot take time, chat. Give me your worst one."]
+       "Settle something for me, chat: is a hot dog a sandwich?",
+       "Chat, what are you eating right now? I'm judging, quietly.",
+       "Name my top hat, chat. Best name gets a shout-out.",
+       "If I hit a thousand x, what's the victory dance? Describe it.",
+       "Chat, what's the best thing that happened to you today? Small wins count.",
+       "Quick poll: tower, mines or road. Type it, I'm listening.",
+       "Chat, describe tonight's stream in three words. Go.",
+       "Be honest, chat: who's watching this at work?",
+       "Chat, what's your lucky number? I'm out of ideas.",
+       "Tell me something weird about where you live, chat.",
+       "Okay chat, superstition check: what do you do for luck?",
+       "Chat, coffee or tea? This decides whether we can be friends."]
 expression = "happy"
 reaction = "lean_in"
 
