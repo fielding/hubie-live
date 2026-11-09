@@ -734,7 +734,7 @@ class Runner:
         every = self.config.current.grind_line_every
         for spin in range(1, 501):
             await self.paused.wait()
-            await self.maybe_answer_chat()
+            self._business()
             if self.pending_game and self.pending_game != g.id:
                 return                                   # chat voted something else: stop here
             await self.puppet.send({"type": "typing", "seconds": 0.4})
@@ -758,10 +758,18 @@ class Runner:
                                      r["expression"] if r else "laugh", "pop_up")
                 return
             if spin % every == 0:                         # a check-in now and then, not every spin
-                r = await self.brain.react(g, {**event, "note": f"{spin} spins without a hit so far"},
-                                           list(self.recent))
-                if r and r.get("say"):
-                    await self.speak(r["say"], r["expression"], None)
+                # Said over the spinning, not between spins. The drought is only one of the topics:
+                # a line about it every ten spins was the same joke for half an hour.
+                roll = random.random()
+                if roll < 0.35:
+                    check = {**event, "note": f"{spin} spins without a hit so far"}
+                elif roll < 0.7:
+                    names = list(dict.fromkeys(line.split(":", 1)[0] for _, line in reversed(self.chat_log)))[:4]
+                    check = {"kind": "chat_time", "recent_chatters": names, "talk_about": BAG.draw(CHAT_ANGLES),
+                             "note": "Don't mention the spins or the drought. Talk TO chat."}
+                else:
+                    check = {"kind": "check_in", "spins_so_far": spin, "talk_about": BAG.draw(CHECK_IN_ANGLES)}
+                self._in_background(self._talk(g, check))
             else:
                 await asyncio.sleep(0.3)
 
