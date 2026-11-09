@@ -42,7 +42,7 @@ CHECK_IN_ANGLES = ("how this session is going, in one vivid image", "something a
                    "a ridiculous superstition you're trying right now", "what you'd buy with the record if it were real",
                    "a fake sponsor you'd love to have", "your rival (an imaginary rich sloth named Reginald)",
                    "what your top hat has seen", "a dramatic movie-trailer voice description of this session",
-                   "giving chat a one-line life lesson that is clearly terrible advice",
+                   "a one-line life lesson that is clearly terrible advice (about anything but gambling, money or risk)",
                    "a confession about your worst habit", "rating the last few minutes like a sports commentator",
                    "a weird thought you just had about the game's design", "what you'd name this session if it were an album")
 CHAT_ANGLES = ("a question for chat about their night", "calling out the lurkers to say hi",
@@ -757,12 +757,12 @@ class Runner:
                     await self.speak(r["say"] if r else f"Finally! {event['multiplier']} x on spin {spin}!",
                                      r["expression"] if r else "laugh", "pop_up")
                 return
-            if spin % every == 0:                         # a check-in now and then, not every spin
+            if spin % every == 0 and time.time() - self._last_line_at > 25:   # a check-in now and then
                 # Said over the spinning, not between spins. The drought is only one of the topics:
                 # a line about it every ten spins was the same joke for half an hour.
                 roll = random.random()
                 if roll < 0.35:
-                    check = {**event, "note": f"{spin} spins without a hit so far"}
+                    check = {"kind": "drought", "spins_without_a_hit": spin}
                 elif roll < 0.7:
                     names = list(dict.fromkeys(line.split(":", 1)[0] for _, line in reversed(self.chat_log)))[:4]
                     check = {"kind": "chat_time", "recent_chatters": names, "talk_about": BAG.draw(CHAT_ANGLES),
