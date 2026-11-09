@@ -137,9 +137,9 @@
   #follow .kicker { font-size: 15px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--magenta); font-weight: 800; }
   #follow .who { font-size: 34px; font-weight: 800; color: var(--cream); max-width: 640px; overflow: hidden; text-overflow: ellipsis; }
   @keyframes beat { 15% { transform: scale(1.18); } 30% { transform: scale(1); } }
-  /* Always on screen (contest + platform rules): 18+, play responsibly, demo play. Top-right corner of
-     the game monitor, small enough to never cover play. */
-  #rg { position: absolute; right: 218px; top: 108px; display: flex; gap: 8px; align-items: center;
+  /* Always on screen (contest + platform rules): 18+, play responsibly, demo play. Centered under the
+     game monitor, off the game itself (each game lays out its own corners differently). */
+  #rg { position: absolute; left: 1301px; top: 640px; transform: translateX(-50%); white-space: nowrap; display: flex; gap: 8px; align-items: center;
         padding: 5px 12px; border-radius: 999px; background: rgba(12, 11, 24, 0.78);
         border: 1px solid rgba(251, 238, 224, 0.25); font-size: 14px; letter-spacing: 0.06em; color: var(--cream); }
   #rg b { color: var(--gold); }

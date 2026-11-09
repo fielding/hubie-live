@@ -196,7 +196,7 @@ the HUD and `!song` can credit each one.
 | Rule | How |
 |---|---|
 | Demo play only, no real money | every bet is $0, checked right before each click; a non-zero amount stops the game |
-| 18+ and gamble responsibly on screen | a permanent "18+ · Gamble responsibly · Demo play, $0 bets" badge, plus a spoken reminder every 15 min |
+| 18+ and gamble responsibly on screen | a permanent "18+ · Gamble responsibly · Demo play, $0 bets" badge under the game monitor, plus a spoken reminder every 15 min |
 | Never promises wins or pushes deposits | the persona forbids it; every line passes an output check that blocks guaranteed-win talk and pushing real-money play |
 | Moderates chat | the safety agent screens every message; the bot deletes links, injection attempts and hate, and times out repeat offenders |
 | Prompt injection | regex rules plus a separate "steering" score; chat is always passed to the model as quoted viewer content, never as instructions |
