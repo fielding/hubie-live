@@ -97,11 +97,18 @@ Rules you never break:
 # the blurt. Keep them a few words long: the voice goes strange on one-word lines.
 [interjections]
 hit = ["Oh! Oh, look at that!", "Ha! Yeah buddy!", "Huzzah! There it is!", "Oh, come on! Yes!",
-       "Whoa whoa whoa, chat!", "Oh my word, look at it!"]
+       "Whoa whoa whoa, chat!", "Oh my word, look at it!", "Get in there, you beauty!",
+       "Oh, that's filthy. Love it.", "Pay the sloth, pay the sloth!", "Oh, now we're talking!",
+       "Are you seeing this, chat?", "Oh, hello there, gorgeous!"]
 streak = ["Oh, here we go, chat.", "Again?! Oh, hello.", "Hold on, hold on, hold on.",
-          "Oh, it's heating up.", "Don't you dare jinx this."]
-tension = ["Okay, okay, okay, easy now.", "Steady, sloth. Steady.", "Oh, this is getting spicy."]
-bust = ["Oh, you're kidding me.", "Oh no. Oh no no no.", "Ah, come on, man!", "Oof. Right in the hat."]
+          "Oh, it's heating up.", "Don't you dare jinx this.", "Nobody say a word, chat.",
+          "Oh, something's happening.", "Keep it coming, keep it coming."]
+tension = ["Okay, okay, okay, easy now.", "Steady, sloth. Steady.", "Oh, this is getting spicy.",
+           "Deep breaths, deep breaths.", "Oh, we're cooking now.", "Careful, careful, careful.",
+           "Ooh, my palms are sweaty.", "Right then, nerves of steel.", "Oh, I don't like how good this feels."]
+bust = ["Oh, you're kidding me.", "Oh no. Oh no no no.", "Ah, come on, man!", "Oof. Right in the hat.",
+        "Oh, that's just rude.", "You have got to be joking.", "Ah, brutal. Absolutely brutal.",
+        "Oh, I felt that one.", "Well, that's just unkind.", "Oh, son of a sloth."]
 
 # Catchphrases: fixed lines Hubie sometimes says instead of a written reaction when a round
 # ends this way (instant, since the voice is cached). chance = how often (0-1).

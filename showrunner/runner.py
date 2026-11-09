@@ -43,6 +43,7 @@ CHAT_ANGLES = ("a question for chat about their night", "calling out the lurkers
                "a would-you-rather for chat", "asking chat for a song or a hot take", "roasting a recent chatter (playfully)",
                "asking chat to pick your next game with a vote", "a story about life on Fielding's couch, then ask chat theirs",
                "asking chat what they'd do with your record multiplier")
+BLURT_GAP_S = 20               # least time between instant interjections
 CLIP_MIN_X = 500               # hits this big get auto-clipped (a game can raise its own bar: clip_x)
 CLIP_HYPE = ("this moment just got clipped for the highlight reel: hype it up, tell chat to share the clip, "
              "act like a streamer who knows this one's going viral")
@@ -79,7 +80,11 @@ class Runner:
         self._ladder: dict | None = None            # auto session's pretend bet size, for the HUD
         self._game_since = time.time()
         self._blurts: dict[str, tuple] = {}         # interjection text -> voiced clips, ready to play
-        self._last_blurt = ""
+        self._recent_blurts: collections.deque = collections.deque(maxlen=6)
+        self._blurt_at = 0.0
+        self._act_done = 0.0
+        self._last_turn: dict[str, dict] = {}       # step games: the plan last used, per game
+        self._plan_ahead: tuple[str, asyncio.Task] | None = None   # step games: next round's plan, written during this one
         self.now_playing: dict | None = None                       # set by the stage page's music player
         self.up_next: dict | None = None
         self._skip_votes: set[str] = set()
@@ -145,13 +150,20 @@ class Runner:
         line = normalize(line or "").lstrip(":;,.-\u2013\u2014 ")   # models sometimes lead with ": "
         if not line:
             return None
+        spoken = self._pronounce(line)
+
+        async def voice():
+            async with venice.slot():
+                return await asyncio.to_thread(self._render, spoken, self.config.current.voice_speed)
+        # The safety check and the voice render run side by side (each takes a second or more); a
+        # blocked line's audio is simply never played.
+        render = asyncio.create_task(voice())
         if not checked and not await self.safety.check_output(line):
+            render.cancel()
             log.info("output check blocked: %r", line)
             return None
-        spoken = self._pronounce(line)
         try:
-            async with venice.slot():
-                clips = await asyncio.to_thread(self._render, spoken, self.config.current.voice_speed)
+            clips = await render
         except tts.TTSError as e:
             if "content policy" not in str(e):
                 log.warning("tts failed: %s | line: %r", e, line)
@@ -289,8 +301,12 @@ class Runner:
         line but leaves voicing until it's actually needed (see _voiced)."""
         if speculative:
             venice.speculative()
+        t0 = time.time()
         out = await coro
+        t1 = time.time()
         ready = await self.prepare(out["say"]) if voice and out and out.get("say") else None
+        log.info("timing: line written in %.1fs, voiced in %.1fs%s", t1 - t0, time.time() - t1,
+                 " (ahead)" if speculative else "")
         return out, ready
 
     async def _voiced(self, out, ready):
@@ -303,10 +319,17 @@ class Runner:
     # One brain call plans a round (or a whole auto session); the moves then go out back to back
     # with no thinking between them. Hubie speaks only when it's worth hearing: a run past
     # talk_from_x, a big hit, a streak, a record. Ordinary busts get a face (sometimes a catchphrase).
-    async def _talk(self, g, event: dict, pre: asyncio.Task | None = None):
+    async def _talk(self, g, event: dict, pre: asyncio.Task | None = None, stale: asyncio.Event | None = None,
+                    unless: asyncio.Task | None = None) -> bool:
         """A line about a moment. A big one gets an instant pre-voiced blurt while the real line is
         written and voiced (a few seconds), so the reaction lands with the hit, not after it; the line
-        then follows on from the blurt. pre: the line already being written ahead (see _auto_session)."""
+        then follows on from the blurt. pre: the line already being written ahead (see _auto_session).
+        stale: set once the moment has passed (drop the line if it isn't ready by then). unless: skip
+        this line if that earlier one got said (a bust right after he hyped the run)."""
+        if unless:
+            said = await asyncio.gather(unless, return_exceptions=True)
+            if said[0] is True:
+                return False
         blurt = None if pre and pre.done() else self._pick_blurt(self._blurt_kind(event))
         if pre is None:
             pre = asyncio.create_task(self._think(self.brain.react(
@@ -315,8 +338,11 @@ class Runner:
             await self._say_blurt(blurt, event)
         r, ready = await pre
         ready = await self._voiced(r, ready)
+        if stale and stale.is_set():
+            return False                               # the round moved on while it was being written
         if r and ready:
-            await self.play(ready, r["expression"], r["reaction"] or self._default_reaction(event))
+            return await self.play(ready, r["expression"], r["reaction"] or self._default_reaction(event))
+        return False
 
     # ---- interjections --------------------------------------------------------------
     async def _voice_blurts(self):
@@ -344,16 +370,20 @@ class Runner:
     def _pick_blurt(self, kind: str | None) -> str | None:
         """A voiced blurt for this moment, or None (none ready, or he's mid-sentence: a blurt that
         waits for the lock isn't instant any more)."""
-        if not kind or self.speak_lock.locked():
+        # A blurt is for the moment that stands out: on a hot board 8x comes every round, and a blurt on
+        # every one became a tic. At most one every BLURT_GAP_S, never one of the last few again.
+        if not kind or self.speak_lock.locked() or time.time() - self._blurt_at < BLURT_GAP_S:
             return None
-        lines = [x for x in (self.config.current.interjections or {}).get(kind, ()) if x != self._last_blurt]
+        lines = [x for x in (self.config.current.interjections or {}).get(kind, ()) if x not in self._recent_blurts]
         ready = [x for x in lines if x in self._blurts]
         if len(ready) < len(lines):
             asyncio.create_task(self._voice_blurts())  # lines added to config while live
         if not ready:
             return None
-        self._last_blurt = random.choice(ready)
-        return self._last_blurt
+        line = random.choice(ready)
+        self._recent_blurts.append(line)
+        self._blurt_at = time.time()
+        return line
 
     async def _say_blurt(self, line: str, event: dict):
         face = {"hit": "laugh", "streak": "surprised", "tension": "surprised", "bust": "grimace"}[self._blurt_kind(event)]
@@ -376,28 +406,71 @@ class Runner:
             return g.step_action()
         return {"type": next(a["type"] for a in g.legal_actions() if a["type"] != "cashout")}
 
+    def _business(self):
+        """Between-move business (chat replies, ads and reminders, a word on a new track) runs in the
+        background while play goes on, one thing at a time."""
+        if self._bg_talk and not self._bg_talk.done():
+            return
+        if self.candidates and time.time() - self.last_chat_reply >= self.config.current.chat_reply_every:
+            self._in_background(self.maybe_answer_chat())
+        elif self._segment_due():
+            self._in_background(self.maybe_run_segment())
+        elif self._music_comment is not None:
+            self._in_background(self.maybe_comment_music())
+
+    def _then(self, coro):
+        """Queue a line behind the one in flight (instead of dropping it like _in_background)."""
+        prev = self._bg_talk
+
+        async def chained():
+            if prev and not prev.done():
+                await asyncio.gather(prev, return_exceptions=True)
+            return await coro
+        self._bg_talk = asyncio.create_task(chained())
+        return self._bg_talk
+
+    async def _opener(self, out):
+        ready = await self.prepare(out["say"])
+        await self.play(ready, out["expression"], out["reaction"])
+
     async def _fast_steps(self, g):
         cfg = self.config.current
         target, peak = cfg.talk_from_x, 1.0
         if not g.in_round() and self.picks.get(g.id):
             self._apply_picks(g)                       # chat's "!mines 10" for this round
+            self._plan_ahead = None                    # planned before chat picked
         if not g.in_round():
-            turn, ready = await self._think(self.brain.plan_round(g, list(self.recent), "steps"))
+            # The plan for this round was written during the last one, so a round starts right away.
+            # Words only: the opener is voiced (in the background) only when it's actually said.
+            ahead, self._plan_ahead = self._plan_ahead, None
+            last = self._last_turn.get(g.id)
+            if ahead and ahead[0] == g.id and not ahead[1].done() and last:
+                turn, self._plan_ahead = last, ahead       # a round shorter than a plan: same again, keep that one coming
+            else:
+                if ahead and ahead[0] == g.id and not ahead[1].cancelled():
+                    turn, _ = await ahead[1]
+                else:
+                    turn, _ = await self._think(self.brain.plan_round(g, list(self.recent), "steps"), voice=False)
+                self._plan_ahead = (g.id, asyncio.create_task(self._think(
+                    self.brain.plan_round(g, list(self.recent), "steps"), speculative=True, voice=False)))
+            if turn:
+                self._last_turn[g.id] = turn
             await self._face(random.choice(("focused", "neutral")), force=True)
             if turn:
                 target = turn["cash_out_at"]
                 # An opener only when the plan changes (new difficulty...): same settings, just go.
                 start = {k: v for k, v in turn["action"].items() if k != "bet"}
-                if ready and start != self._last_start.get(g.id):
-                    await self.play(ready, turn["expression"], turn["reaction"])
+                if turn.get("say") and start != self._last_start.get(g.id):
+                    self._in_background(self._opener(turn))
                 self._last_start[g.id] = start
             ev = await self._act(g, turn["action"] if turn else g.default_action())
             self.recent.append(f"{g.title}: {json.dumps(ev)} (cash out at {target:g}x)")
             await self.push_game_state(ev)
-        next_talk, talked = cfg.talk_from_x, False
+        next_talk, run_talk = cfg.talk_from_x, None
+        stale = asyncio.Event()                        # set when the round ends: run lines still being written are dropped
         for _ in range(60):
             await self.paused.wait()
-            await self.maybe_answer_chat()
+            self._business()
             can_cash = any(a["type"] == "cashout" for a in g.legal_actions())
             action = {"type": "cashout"} if can_cash and peak >= target else self._step_action(g)
             await self.puppet.send({"type": "typing", "seconds": 0.35})
@@ -409,23 +482,30 @@ class Runner:
                 if peak >= next_talk:                   # a run worth talking about: 5x, 10x, 20x...
                     next_talk = peak * 2
                     self.recent.append(f"{g.title}: {json.dumps(ev)}")
-                    await self._talk(g, {**ev, "kind": "deep_run", "cash_out_at": target})
-                    talked = True
+                    # Talk over the play like a streamer: the blurt lands now, the line follows while
+                    # the clicks go on (a beat slower, so the run doesn't blow past the comment).
+                    run_talk = self._then(self._talk(g, {**ev, "kind": "deep_run", "cash_out_at": target}, stale=stale))
+                    await asyncio.sleep(1.5)
                 await asyncio.sleep(0.25)
                 continue
             if ev["kind"] not in ("bust", "cashout", "win", "loss"):
                 continue
             if ev["kind"] == "bust":
                 ev["reached"] = peak
+            stale.set()
             self.recent.append(f"{g.title}: {json.dumps(ev)}")
             await self.puppet.reaction(self._default_reaction(ev))
-            # One line per round: a bust right after he hyped the run just gets a face; a cash-out
-            # (the payoff) always gets its line once it's big.
-            big = float(ev.get("multiplier") or 0) >= cfg.talk_from_x if ev["kind"] != "bust" else \
-                (peak >= cfg.talk_from_x and not talked) or peak >= cfg.talk_from_x * 4   # a huge run lost: always
-            return await self._fast_result(g, ev, big=big)
+            # One line per round: a bust right after his run line got said just gets a face (unless the
+            # run was huge); a cash-out (the payoff) always gets its line once it's big.
+            if ev["kind"] != "bust":
+                return await self._fast_result(g, ev, big=float(ev.get("multiplier") or 0) >= cfg.talk_from_x)
+            # On a hot board a bust just past the line (8x on 16 mines) happens every round, and a line
+            # on each one became "8x and I got greedy" on repeat: a bust needs a real run (or quiet air).
+            quiet = cfg.max_quiet_seconds and time.time() - self._last_line_at > cfg.max_quiet_seconds
+            return await self._fast_result(g, ev, big=peak >= cfg.talk_from_x * 2 or (peak >= cfg.talk_from_x and quiet),
+                                           unless=None if peak >= cfg.talk_from_x * 4 else run_talk)
 
-    async def _fast_result(self, g, ev: dict, big: bool):
+    async def _fast_result(self, g, ev: dict, big: bool, unless: asyncio.Task | None = None):
         record = self._record(ev)
         self._save_state()
         await self.push_stats()
@@ -434,7 +514,9 @@ class Runner:
             m = float(ev["multiplier"])
             await self._announce_record(g, m)
         elif big or clipped:
-            await self._talk(g, {**ev, "clip": CLIP_HYPE} if clipped else ev)
+            # Said over the start of the next round, not in front of it.
+            self._then(self._talk(g, {**ev, "clip": CLIP_HYPE} if clipped else ev, unless=None if clipped else unless))
+            await asyncio.sleep(1.5)
         else:
             cfg = self.config.current
             lines = (cfg.catchphrases or {}).get(ev["kind"])
@@ -442,7 +524,7 @@ class Runner:
             # alone would make it a running gag every few seconds: at most one a minute.
             if lines and random.random() < cfg.catchphrase_chance and time.time() - self._catch_at > 60:
                 self._catch_at = time.time()
-                await self.speak(random.choice(lines), "laugh", self._default_reaction(ev), checked=True)
+                self._in_background(self.speak(random.choice(lines), "laugh", self._default_reaction(ev), checked=True))
             await asyncio.sleep(0.6)
 
     def _in_background(self, coro):
@@ -497,15 +579,7 @@ class Runner:
                     log.info("%s code changed; restarting the session with it", g.id)
                     self.game = self.games.create(g.id, g.balance)   # the edited version, from the next bet
                     break
-                if not (self._bg_talk and not self._bg_talk.done()):
-                    # Between-round business (chat replies, ads and reminders, a word on a new track)
-                    # happens while the bets roll on, one thing at a time.
-                    if self.candidates and time.time() - self.last_chat_reply >= cfg.chat_reply_every:
-                        self._in_background(self.maybe_answer_chat())
-                    elif self._segment_due():
-                        self._in_background(self.maybe_run_segment())
-                    elif self._music_comment is not None:
-                        self._in_background(self.maybe_comment_music())
+                self._business()
                 await self.puppet.send({"type": "typing", "seconds": 0.3})
                 ev = await self._act(g, dict(action))
                 played += 1
@@ -820,17 +894,21 @@ class Runner:
             return {"kind": "cashout", "multiplier": st.get("multiplier"), "payout": 0, "bet": 0, "perfect": False}
         return None
 
-    @staticmethod
-    async def _act(g, action: dict) -> dict:
+    async def _act(self, g, action: dict) -> dict:
         """One move; real-site games are async (they click and wait for the page)."""
         async def run(a):
             ev = g.act(a)
             return await ev if inspect.isawaitable(ev) else ev
+        idle = time.time() - self._act_done
+        if 3 < idle < 600:                        # dead air on screen: nothing moving in the game
+            log.info("timing: game idle %.1fs before %s", idle, action.get("type"))
         try:
             return await run(action)
         except IllegalAction as e:
             log.warning("illegal action %s (%s); using default", action, e)
             return await run(g.default_action())
+        finally:
+            self._act_done = time.time()
 
     @staticmethod
     def _default_reaction(event: dict) -> str:
@@ -945,6 +1023,10 @@ class Runner:
                     await self.reload_game_page("routine refresh")
                 await self.play_round()
                 self._fail_count.pop(self.game.id, None)   # a clean round clears its failure count
+                if getattr(self.game, "live", False) and self.config.current.fast_play:
+                    self._business()
+                    await asyncio.sleep(0.3)
+                    continue
                 await self.maybe_run_segment()
                 await self.maybe_comment_music()
                 await self.maybe_answer_chat()
