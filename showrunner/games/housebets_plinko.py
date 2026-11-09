@@ -86,6 +86,12 @@ class HousebetsPlinko(HousebetsGame):
         wiped), so "landed" means: the strip changed and then stayed the same for a moment."""
         async def strip():
             return [c["text"] for c in await self.query(SEL["chips"])]
+        # Stamp the current chips: the page redraws the strip when balls land, so unstamped chips
+        # mean new results even when they read exactly like the old ones (five 0.2x in a row).
+        await self.bridge.request({"type": "mark", "scope": "game", "selector": SEL["chips"]})
+
+        async def redrawn():
+            return any("data-hubie-seen" not in c["attrs"] for c in await self.query(SEL["chips"]))
         before = await strip()
         dropped = 0
         for _ in range(BURST):
@@ -106,7 +112,7 @@ class HousebetsPlinko(HousebetsGame):
             elif now != before and loop.time() - steady_since >= 1.0:
                 break
             await asyncio.sleep(0.25)
-        if not last or last == before:
+        if not last or (last == before and not await redrawn()):
             raise SiteError("plinko results never showed")
         out = []
         for text in last[:dropped]:
