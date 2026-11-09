@@ -63,6 +63,7 @@ class Config:
     ignore_users: frozenset = frozenset()    # chat accounts Hubie never shows or answers (his bot)
     bot_commands: dict = None                # "!cmd" -> text the Kick bot posts
     catchphrase_chance: float = 0.0
+    interjections: dict = None               # moment -> pre-voiced blurts said the instant it lands
 
 
 def _num(d, key, lo, hi, default=None):
@@ -129,6 +130,12 @@ def parse(raw: dict) -> Config:
                 not all(isinstance(x, str) and 0 < len(x) <= 120 for x in lines):
             raise ValueError(f"catchphrases.{kind}: needs a list of short lines for safe/bust/cashout/win/loss")
         phrases[kind] = tuple(lines)
+    blurts = {}
+    for kind, lines in raw.get("interjections", {}).items():
+        if kind not in ("hit", "streak", "tension", "bust") or not isinstance(lines, list) or \
+                not all(isinstance(x, str) and 0 < len(x) <= 60 for x in lines):
+            raise ValueError(f"interjections.{kind}: needs a list of short lines for hit/streak/tension/bust")
+        blurts[kind] = tuple(lines)
     waiting = raw.get("lines", {}).get("waiting", ["Hold on a second, chat."])
     if not isinstance(waiting, list) or not waiting or not all(isinstance(x, str) and 0 < len(x) <= 120 for x in waiting):
         raise ValueError("lines.waiting: needs a list of short lines")
@@ -164,7 +171,7 @@ def parse(raw: dict) -> Config:
         kick_moderate=bool(raw.get("kickbot", {}).get("moderate", True)),
         ignore_users=frozenset(str(u).lower() for u in raw.get("kickbot", {}).get("ignore_users", [])),
         bot_commands=_bot_commands(raw.get("kickbot", {}).get("commands", {})),
-        catchphrase_chance=_num(cp, "chance", 0, 1, 0.3))
+        catchphrase_chance=_num(cp, "chance", 0, 1, 0.3), interjections=blurts)
 
 
 class LiveConfig:

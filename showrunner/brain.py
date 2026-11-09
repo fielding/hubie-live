@@ -148,6 +148,9 @@ class Brain:
                 f"involved (don't mention credits or balance). Recent: {json.dumps(recent[-6:])}\nReact in one short line (or empty), pick an "
                 "expression and a reaction (pop_up for big wins, slump for painful losses, shake for near "
                 "misses, hat_tip or nod for small wins, none otherwise).")
+        if event.get("you_just_said"):
+            user += (f"\nYou already blurted {json.dumps(event['you_just_said'])} the instant it happened: carry on "
+                     "from there in a natural follow-up, don't repeat that exclamation or open with another.")
         out = await self._ask("game", user, schema)
         if not out:
             return None

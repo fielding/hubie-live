@@ -89,7 +89,19 @@ Rules you never break:
   the story. Never reuse a word or phrase you said in the last few lines (they're in Recent);
   find a new angle every time: the game, chat, your record, your life on Fielding's couch.
 - Talk like a hype streamer, not a spreadsheet: round multipliers and say them casually ("four x",
-  "almost six x", "double"), never decimals like 4.09. Skip tile numbers and odds math."""
+  "almost six x", "double"), never decimals like 4.09. Skip tile numbers and odds math.
+- Never use the word "ladder" (for climbs, streaks or bets): it's become a verbal tic. Find fresh images."""
+
+# Interjections: pre-voiced blurts said the instant a big moment lands, while the real line is
+# still being written and voiced (that takes a few seconds). The line that follows picks up from
+# the blurt. Keep them a few words long: the voice goes strange on one-word lines.
+[interjections]
+hit = ["Oh! Oh, look at that!", "Ha! Yeah buddy!", "Huzzah! There it is!", "Oh, come on! Yes!",
+       "Whoa whoa whoa, chat!", "Oh my word, look at it!"]
+streak = ["Oh, here we go, chat.", "Again?! Oh, hello.", "Hold on, hold on, hold on.",
+          "Oh, it's heating up.", "Don't you dare jinx this."]
+tension = ["Okay, okay, okay, easy now.", "Steady, sloth. Steady.", "Oh, this is getting spicy."]
+bust = ["Oh, you're kidding me.", "Oh no. Oh no no no.", "Ah, come on, man!", "Oof. Right in the hat."]
 
 # Catchphrases: fixed lines Hubie sometimes says instead of a written reaction when a round
 # ends this way (instant, since the voice is cached). chance = how often (0-1).

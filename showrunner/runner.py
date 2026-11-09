@@ -78,6 +78,8 @@ class Runner:
         self._last_start: dict[str, dict] = {}       # fast play: last round's start settings per game
         self._ladder: dict | None = None            # auto session's pretend bet size, for the HUD
         self._game_since = time.time()
+        self._blurts: dict[str, tuple] = {}         # interjection text -> voiced clips, ready to play
+        self._last_blurt = ""
         self.now_playing: dict | None = None                       # set by the stage page's music player
         self.up_next: dict | None = None
         self._skip_votes: set[str] = set()
@@ -301,10 +303,73 @@ class Runner:
     # One brain call plans a round (or a whole auto session); the moves then go out back to back
     # with no thinking between them. Hubie speaks only when it's worth hearing: a run past
     # talk_from_x, a big hit, a streak, a record. Ordinary busts get a face (sometimes a catchphrase).
-    async def _talk(self, g, event: dict):
-        r, ready = await self._think(self.brain.react(g, event, list(self.recent)))
+    async def _talk(self, g, event: dict, pre: asyncio.Task | None = None):
+        """A line about a moment. A big one gets an instant pre-voiced blurt while the real line is
+        written and voiced (a few seconds), so the reaction lands with the hit, not after it; the line
+        then follows on from the blurt. pre: the line already being written ahead (see _auto_session)."""
+        blurt = None if pre and pre.done() else self._pick_blurt(self._blurt_kind(event))
+        if pre is None:
+            pre = asyncio.create_task(self._think(self.brain.react(
+                g, {**event, "you_just_said": blurt} if blurt else event, list(self.recent))))
+        if blurt:
+            await self._say_blurt(blurt, event)
+        r, ready = await pre
+        ready = await self._voiced(r, ready)
         if r and ready:
             await self.play(ready, r["expression"], r["reaction"] or self._default_reaction(event))
+
+    # ---- interjections --------------------------------------------------------------
+    async def _voice_blurts(self):
+        """Voice every interjection once (the voice cache keeps them across restarts)."""
+        for lines in (self.config.current.interjections or {}).values():
+            for line in lines:
+                if line not in self._blurts:
+                    ready = await self.prepare(line, checked=True)
+                    if ready:
+                        self._blurts[line] = ready
+
+    @staticmethod
+    def _blurt_kind(event: dict) -> str | None:
+        kind = event.get("kind")
+        if event.get("clip") or kind in ("win", "cashout"):
+            return "hit"
+        if kind == "win_streak":
+            return None if str(event.get("mood", "")).startswith("tease") else "streak"   # play a tease cool
+        if kind == "deep_run":
+            return "tension"
+        if kind in ("bust", "loss", "streak_broken"):
+            return "bust"
+        return None                                    # check-ins, chat time, music: no rush
+
+    def _pick_blurt(self, kind: str | None) -> str | None:
+        """A voiced blurt for this moment, or None (none ready, or he's mid-sentence: a blurt that
+        waits for the lock isn't instant any more)."""
+        if not kind or self.speak_lock.locked():
+            return None
+        lines = [x for x in (self.config.current.interjections or {}).get(kind, ()) if x != self._last_blurt]
+        ready = [x for x in lines if x in self._blurts]
+        if len(ready) < len(lines):
+            asyncio.create_task(self._voice_blurts())  # lines added to config while live
+        if not ready:
+            return None
+        self._last_blurt = random.choice(ready)
+        return self._last_blurt
+
+    async def _say_blurt(self, line: str, event: dict):
+        face = {"hit": "laugh", "streak": "surprised", "tension": "surprised", "bust": "grimace"}[self._blurt_kind(event)]
+        async with self.speak_lock:
+            log.info("HUBIE (blurt): %s", line)
+            await self.puppet.say(self._blurts[line][1], face)
+            self._last_line_at = time.time()
+
+    async def _announce_record(self, g, m: float):
+        if self.kick:
+            self.kick.say(f"NEW STREAM RECORD: {m:g}x on {g.title.title()}!")
+        line = asyncio.create_task(self.prepare(f"NEW STREAM RECORD! {m:g} x! Somebody clip that!", checked=True))
+        blurt = self._pick_blurt("hit")
+        if blurt:
+            await self._say_blurt(blurt, {"kind": "win"})
+        await self.play(await line, "laugh", "pop_up")
 
     def _step_action(self, g) -> dict:
         if hasattr(g, "step_action"):
@@ -367,9 +432,7 @@ class Runner:
         clipped = await self._maybe_clip(g, ev, record)
         if record:
             m = float(ev["multiplier"])
-            if self.kick:
-                self.kick.say(f"NEW STREAM RECORD: {m:g}x on {g.title.title()}!")
-            await self.speak(f"NEW STREAM RECORD! {m:g} x! Somebody clip that!", "laugh", "pop_up", checked=True)
+            await self._announce_record(g, m)
         elif big or clipped:
             await self._talk(g, {**ev, "clip": CLIP_HYPE} if clipped else ev)
         else:
@@ -407,6 +470,19 @@ class Runner:
         self._last_start[g.id] = start
         self.recent.append(f"{g.title}: rolling continuously, {json.dumps(action)}, pressing +{inc:.0%} on wins")
         units, streak, wins, peak_units, played, dry, best_hit = 1.0, 0, 0, 1.0, 0, 0, 0.0
+
+        def streak_event(n: int, m: float, units: float) -> dict:
+            # How special a streak is depends on the odds: two 6x dice wins in a row (~3%) is a tease,
+            # two coin flips (25%) is nothing. Tiers by how unlikely this streak is.
+            rare = p_win ** n
+            mood = ("huge: this is the run chat came for, full hype" if rare <= 0.0002 else
+                    "building: getting real, tension, hint at how rare a few more would be" if rare <= 0.005
+                    else "tease: barely anything yet, play it cool, hint at what it could become")
+            return {"kind": "win_streak", "streak": n, "multiplier": m, "mood": mood, "bet_size_units": round(units, 2)}
+        # (streak, task): the line for the next win, written and voiced while that bet is still in the air,
+        # so a streak line lands right on the hit. Fixed-target games only (the next win pays the same).
+        ahead: tuple[int, asyncio.Task] | None = None
+        p_win = g.win_chance(action) if hasattr(g, "win_chance") else 0.5
         try:
             while played < 400:
                 await self.paused.wait()
@@ -464,20 +540,12 @@ class Runner:
                     await self._face(random.choice(("neutral", "focused", "happy", "smug")))
                 clipped = await self._maybe_clip(g, ev, record)
                 if record:
-                    if self.kick:
-                        self.kick.say(f"NEW STREAM RECORD: {m:g}x on {g.title.title()}!")
-                    await self.speak(f"NEW STREAM RECORD! {m:g} x! Somebody clip that!", "laugh", "pop_up", checked=True)
+                    await self._announce_record(g, m)
                 elif clipped:                               # a monster hit: always worth the moment
                     await self._talk(g, {**ev, "clip": CLIP_HYPE})
                 elif won and streak >= 2 and getattr(g, "streak_talk", True) and p_win ** streak <= 0.1:
-                    # How special a streak is depends on the odds: two 6x dice wins in a row (~3%) is a
-                    # tease, two coin flips (25%) is nothing. Tiers by how unlikely this streak is.
-                    rare = p_win ** streak
-                    mood = ("huge: this is the run chat came for, full hype" if rare <= 0.0002 else
-                            "building: getting real, tension, hint at how rare a few more would be" if rare <= 0.005
-                            else "tease: barely anything yet, play it cool, hint at what it could become")
-                    self._in_background(self._talk(g, {"kind": "win_streak", "streak": streak, "multiplier": m,
-                                                       "mood": mood, "bet_size_units": round(units, 2)}))
+                    pre, ahead = (ahead[1], None) if ahead and ahead[0] == streak else (None, ahead)
+                    self._in_background(self._talk(g, streak_event(streak, m, units), pre=pre))
                 elif m >= getattr(g, "big_hit_x", max(20.0, cfg.talk_from_x * 4)):    # a huge single hit
                     self._in_background(self._talk(g, ev))
                 elif not won and broken >= 2 and p_win ** broken <= 0.005 and getattr(g, "streak_talk", True):
@@ -500,8 +568,21 @@ class Runner:
                         if getattr(g, "streak_talk", True):
                             check.update(wins=wins, biggest_bet_units=round(peak_units, 2), bets_since_last_win=dry)
                     self._in_background(self._talk(g, check))
+                if ahead and ahead[0] != streak + 1:
+                    ahead[1].cancel()                          # that streak is over (or its line was used)
+                    ahead = None
+                if won and ahead is None and hasattr(g, "win_chance") and getattr(g, "streak_talk", True) \
+                        and p_win ** (streak + 1) <= 0.1:
+                    nxt = streak_event(streak + 1, m, units * (1 + inc))
+                    # Most of these never happen (a tease is a win or two away all session): write the
+                    # words ahead, but only spend a voice render on the rarer tiers.
+                    ahead = (streak + 1, asyncio.create_task(self._think(
+                        self.brain.react(g, nxt, list(self.recent)), speculative=True,
+                        voice=p_win ** (streak + 1) <= 0.005)))
                 await asyncio.sleep(0.35)
         finally:
+            if ahead:
+                ahead[1].cancel()
             self._ladder = None
             self._save_state()
             await self.push_stats()
@@ -545,9 +626,7 @@ class Runner:
                     event = {**event, "clip": CLIP_HYPE}
                 if record:
                     m = float(event["multiplier"])
-                    if self.kick:
-                        self.kick.say(f"NEW STREAM RECORD: {m:g}x on {g.title.title()}!")
-                    await self.speak(f"NEW STREAM RECORD! {m:g} x! Somebody clip that!", "laugh", "pop_up", checked=True)
+                    await self._announce_record(g, m)
                 else:
                     r = await self.brain.react(g, event, list(self.recent))
                     await self.speak(r["say"] if r else f"Finally! {event['multiplier']} x on spin {spin}!",
@@ -686,9 +765,7 @@ class Runner:
                         if nxt:
                             nxt.cancel()
                         m = float(event["multiplier"])
-                        if self.kick:
-                            self.kick.say(f"NEW STREAM RECORD: {m:g}x on {g.title.title()}!")
-                        await self.speak(f"NEW STREAM RECORD! {m:g} x! Somebody clip that!", "laugh", "pop_up", checked=True)
+                        await self._announce_record(g, m)
                         return
                     cfg = self.config.current
                     # One-shot games (dice, limbo, wheel...) would talk after every single roll; an
@@ -1357,6 +1434,7 @@ class Runner:
         else:
             log.info("auto-clips off (no OBS_WS_PASSWORD)")
         await self.hud.send({"type": "autonomy", "since": self.st["autonomy_since"]}, "autonomy")
+        asyncio.create_task(self._voice_blurts())
         tasks = [asyncio.create_task(t) for t in
                  (self.game_loop(), self.chat_loop(), self.vote_loop(), self.follow_loop(), self.screen_watch_loop(), *[s.run() for s in sources],
                   *[s.viewer_loop(self.hud) for s in sources if hasattr(s, "viewer_loop")],
