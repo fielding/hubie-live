@@ -79,6 +79,14 @@ class HousebetsHiLo(HousebetsGame):
         return {"in_round": "hh-p-mainbtn--cash" in main[0]["cls"], "busy": main[0]["disabled"],
                 "card": card[0]["text"].strip() if card else "?", "odds": odds, "drawn": drawn}
 
+    async def _total(self) -> float | None:
+        """The run's current total multiplier as the page shows it ("13,188.31x" / "1.2kx"), if found."""
+        for el in await self.query('[class*="foot-mult"], [class*="total-mult"], [class*="cur-mult"]'):
+            m = re.search(r"([\d,]+(?:\.\d+)?)\s*(k?)\s*[x×]", el.get("text") or "")
+            if m:
+                return float(m.group(1).replace(",", "")) * (1000 if m.group(2) else 1)
+        return None
+
     async def play(self, kind: str, action: dict) -> dict:
         if kind == "start":
             await self.ensure_page()
@@ -100,11 +108,15 @@ class HousebetsHiLo(HousebetsGame):
                                        "the next card")
             if p["in_round"]:
                 r["wins"] += 1
-                r["multiplier"] = round(r["multiplier"] * pick["multiplier"], 2)
+                # The page's own running total, when it shows one: multiplying the per-guess payouts
+                # (shown rounded to 2 decimals) compounds the rounding and drifted ~3% low on a long
+                # run (12,814x recorded for a 13,188x cash-out, 2026-11-08).
+                r["multiplier"] = await self._total() or round(r["multiplier"] * pick["multiplier"], 2)
                 r["card"], r["odds"] = p["card"], p["odds"]
                 return {"kind": "safe", "side": side, "card": p["card"], "from": before, "multiplier": r["multiplier"]}
             r["status"] = "busted"
             return {"kind": "bust", "side": side, "from": before, "card": p["card"], "lost": 0, "revealed": r["wins"]}
+        r["multiplier"] = await self._total() or r["multiplier"]   # what the page pays, read before it resets
         await self.click_until(SEL["main"], self._page, lambda p: not p["in_round"], "the cash out")
         r["status"] = "cashed"
         return {"kind": "cashout", "multiplier": r["multiplier"], "payout": 0, "bet": 0, "perfect": False}
