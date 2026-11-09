@@ -134,6 +134,9 @@ class BridgeLink(Broadcast):
         super().__init__("housebets-bridge")
         self.max_incoming = 8 * 1024 * 1024      # page snapshots carry the site's HTML
         self.probe_dir = probe_dir
+        self.last_load = 0.0          # when a game page last loaded (top frame)
+        self.last_nav_cmd = 0.0       # when we last asked the extension to navigate
+        self.site_reloads = 0         # page loads we didn't ask for, this run
         self.snapshots: dict[str, dict] = {}       # frame url -> latest snapshot
         self._waiting: dict[str, asyncio.Future] = {}
         self._ids = itertools.count(1)
@@ -157,8 +160,14 @@ class BridgeLink(Broadcast):
             (self.probe_dir / f"{name}.json").write_text(json.dumps(m, indent=1))
         elif kind in ("status", "loaded", "error"):
             log.info("bridge %s: %s", kind, json.dumps({k: v for k, v in m.items() if k != "type"})[:600])
-            if kind == "loaded" and m.get("top"):
+            if kind == "loaded" and m.get("top") and not m.get("reinjected"):
                 self.last_load = time.time()        # any page load (ours, a switch, the site's own)
+                # Ours = we asked for a navigation in the last 30 s. Anything else is the site (or a
+                # person) reloading the page: logged so outages can be blamed on the right side.
+                if time.time() - self.last_nav_cmd > 30:
+                    self.site_reloads += 1
+                    log.warning("site reloaded the page itself (nav=%s, #%d this run): %s",
+                                m.get("nav"), self.site_reloads, m.get("url"))
         elif kind == "done":
             fut = self._waiting.pop(m.get("id"), None)
             if fut and not fut.done():
@@ -168,6 +177,8 @@ class BridgeLink(Broadcast):
         """Send one command to the page and wait for its reply ({"ok":..., "data":...})."""
         if not self.clients:
             return None
+        if msg.get("type") == "navigate":
+            self.last_nav_cmd = time.time()
         cid = f"b-{next(self._ids)}"
         fut = asyncio.get_running_loop().create_future()
         self._waiting[cid] = fut

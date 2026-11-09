@@ -93,7 +93,12 @@
   const safeSnapshot = (reason) => {
     try { snapshot(reason); } catch (e) { send({ type: 'error', where: 'snapshot', error: String(e && e.stack || e).slice(0, 500), url: location.href }); }
   };
-  send({ type: 'loaded', url: location.href, top: window === window.top, title: document.title });
+  // How this page came to be: a fresh navigation (ours when we switch games or reload), the page
+  // reloading itself, or just this script being re-injected into a page that was already open
+  // (extension reload), which isn't a page load at all.
+  const nav = (performance.getEntriesByType('navigation')[0] || {}).type || 'unknown';
+  send({ type: 'loaded', url: location.href, top: window === window.top, title: document.title,
+         nav, reinjected: performance.now() > 10000 });
   // Nudge the extension worker now and then so it's awake to reconnect to the show runner.
   if (window === window.top) setInterval(() => send({ type: 'keepalive' }), 25000);
 
