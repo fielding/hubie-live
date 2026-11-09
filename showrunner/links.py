@@ -138,6 +138,7 @@ class BridgeLink(Broadcast):
         self.last_nav_cmd = 0.0       # when we last asked the extension to navigate
         self.site_reloads = 0         # page loads we didn't ask for, this run
         self.stream_tab = None        # tab id the extension plays in, learned from its replies
+        self.site_reload_at = 0.0     # when the site last reloaded the stream page on its own
         self.snapshots: dict[str, dict] = {}       # frame url -> latest snapshot
         self._waiting: dict[str, asyncio.Future] = {}
         self._ids = itertools.count(1)
@@ -170,6 +171,7 @@ class BridgeLink(Broadcast):
                 # person) reloading the page: logged so outages can be blamed on the right side.
                 if time.time() - self.last_nav_cmd > 30:
                     self.site_reloads += 1
+                    self.site_reload_at = time.time()
                     log.warning("site reloaded the page itself (nav=%s, #%d this run): %s",
                                 m.get("nav"), self.site_reloads, m.get("url"))
         elif kind == "done":

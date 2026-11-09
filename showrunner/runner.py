@@ -32,7 +32,7 @@ FALLBACK_GAME = None            # a simulated game to switch to while a real-sit
 OFFLINE_RETRY_S = 30            # after a real-site failure, wait this long before trying it again
 GAME_COOLDOWN_S = 600           # a game switched away from for failing is skipped (votes too) this long
 BLACK_LEVEL = 8                 # average brightness below this = the captured game window is black
-SCREEN_CHECK_S = 30
+SCREEN_CHECK_S = 10
 # Reload the game page this often, between rounds, so it never goes stale. (Housebets also reloads
 # its own page at irregular times, 13-35 min apart on 2026-11-08; games retry through those.)
 PAGE_REFRESH_S = 3 * 3600
@@ -71,6 +71,7 @@ class Runner:
         self._last_line_at = time.time()
         self.clipper = clipper_mod.Clipper(Path.home() / "Movies" / "Hubie Clips")
         self._screen_reloads: list[float] = []
+        self._handled_site_reload = 0.0
         self._face_at = 0.0
         self._muted: bool | None = None              # game tab muted? (unknown at startup)
         self._bg_talk: asyncio.Task | None = None    # a comment playing while the bets keep going
@@ -1206,6 +1207,17 @@ class Runner:
                 black = still = 0
                 last = None
                 continue
+            # After Housebets reloads its own page, the game is usually left half-drawn until it's
+            # reloaded once more (seen twice 2026-11-09): do that now instead of waiting ~90 s for
+            # the frozen-screen check to notice.
+            bridge = getattr(self, "bridge", None)
+            if bridge and bridge.site_reload_at and bridge.site_reload_at > self._handled_site_reload:
+                self._handled_site_reload = bridge.site_reload_at
+                if time.time() - bridge.site_reload_at < 120:
+                    await self.reload_game_page("the site reloaded the page itself; settling it with a clean reload")
+                    black = still = 0
+                    last = None
+                    continue
             snap = await asyncio.to_thread(screenwatch.snapshot)
             if snap is None:
                 continue
@@ -1213,7 +1225,7 @@ class Runner:
             black = black + 1 if level < BLACK_LEVEL else 0
             still = still + 1 if last is not None and screenwatch.changed(thumb, last) < 0.01 else 0
             last = thumb
-            if black >= 2 or still >= 3:
+            if black >= 6 or still >= 9:              # ~60 s black / ~90 s frozen at 10 s checks
                 why = (f"the captured window is black (brightness {level:.1f})" if black >= 2 else
                        "the captured window froze (no change in 90 s while playing)")
                 black = still = 0
