@@ -21,7 +21,7 @@ Everything runs on one Mac. Plan on about 30 minutes the first time.
 - `uv run --with httpx python tools/ncs_fetch.py --genres 3,29 --per-genre 40` downloads NCS drum and bass.
 
 **5. Start Hubie.**
-- Run `./showrunner/run.sh --chat kick`. It also opens the Housebets game window.
+- Run `./showrunner/run.sh --chat kick --kick-channel <your channel id>`. It also opens the Housebets game window.
 - **First time only:** open `http://localhost:8000/kick/login` in a browser logged in as the bot account.
 
 **6. Set up OBS.** One 1920×1080 scene, three sources, top to bottom:
@@ -41,5 +41,5 @@ Everything runs on one Mac. Plan on about 30 minutes the first time.
 **If something looks wrong:**
 - **The game is black:** Hubie reloads it on his own within about 90 s. Viewers see a "be right back" card meanwhile.
 - **No voice:** check `VENICE_API_KEY`.
-- **No chat:** check the channel id in `run.sh`, which you can pass as `--kick-channel`.
+- **No chat:** check the channel id you passed as `--kick-channel` (the default is the author's channel).
 - Architecture, agents and tools are in [README.md](README.md).

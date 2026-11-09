@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Start the show runner with the Venice key from 1Password (approve the 1Password prompt).
 #   ./showrunner/run.sh                 # simulated chat
-#   ./showrunner/run.sh --chat kick          # real Kick chat (channel fielding)
+#   ./showrunner/run.sh --chat kick --kick-channel <id>   # real Kick chat (default: channel fielding)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 # Keys come from the environment if set, else from 1Password (`op`; approve its prompt).
-VENICE_API_KEY="${VENICE_API_KEY:-$(op read 'op://Private/VENICE_API_KEY/credential')}"
+if [ -z "${VENICE_API_KEY:-}" ]; then
+  command -v op >/dev/null || { echo "Set VENICE_API_KEY (or install the 1Password CLI, op)" >&2; exit 1; }
+  VENICE_API_KEY="$(op read 'op://Private/VENICE_API_KEY/credential')"
+fi
 export VENICE_API_KEY
 # Kick bot app credentials (optional: without them the bot is simply off)
 KICK_CLIENT_ID="${KICK_CLIENT_ID:-$(op read 'op://Private/HUBIE_KICK_BOT/client_id' 2>/dev/null || true)}"

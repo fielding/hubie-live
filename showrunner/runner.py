@@ -43,6 +43,14 @@ CHAT_ANGLES = ("a question for chat about their night", "calling out the lurkers
                "a would-you-rather for chat", "asking chat for a song or a hot take", "roasting a recent chatter (playfully)",
                "asking chat to pick your next game with a vote", "a story about life on Fielding's couch, then ask chat theirs",
                "asking chat what they'd do with your record multiplier")
+def _either(*events: asyncio.Event) -> asyncio.Event:
+    """An event that is set once any of these is (checked when a line is ready, so a cheap view)."""
+    class Either:
+        def is_set(self):
+            return any(e.is_set() for e in events)
+    return Either()
+
+
 BLURT_GAP_S = 20               # least time between instant interjections
 CLIP_MIN_X = 500               # hits this big get auto-clipped (a game can raise its own bar: clip_x)
 CLIP_HYPE = ("this moment just got clipped for the highlight reel: hype it up, tell chat to share the clip, "
@@ -468,6 +476,12 @@ class Runner:
             await self.push_game_state(ev)
         next_talk, run_talk = cfg.talk_from_x, None
         stale = asyncio.Event()                        # set when the round ends: run lines still being written are dropped
+        try:
+            return await self._climb(g, cfg, target, peak, next_talk, run_talk, stale)
+        finally:
+            stale.set()                                # also on a site error: no lines about a dead round
+
+    async def _climb(self, g, cfg, target, peak, next_talk, run_talk, stale):
         for _ in range(60):
             await self.paused.wait()
             self._business()
@@ -484,7 +498,14 @@ class Runner:
                     self.recent.append(f"{g.title}: {json.dumps(ev)}")
                     # Talk over the play like a streamer: the blurt lands now, the line follows while
                     # the clicks go on (a beat slower, so the run doesn't blow past the comment).
-                    run_talk = self._then(self._talk(g, {**ev, "kind": "deep_run", "cash_out_at": target}, stale=stale))
+                    # Only the newest milestone gets a line: an older one not yet said would be stale (10x
+                    # announced at 40x), so it's dropped when a bigger one comes.
+                    line_stale = asyncio.Event()
+                    if run_talk and not run_talk.done():
+                        getattr(run_talk, "stale", line_stale).set()
+                    run_talk = self._then(self._talk(g, {**ev, "kind": "deep_run", "cash_out_at": target},
+                                                     stale=_either(stale, line_stale)))
+                    run_talk.stale = line_stale
                     await asyncio.sleep(1.5)
                 await asyncio.sleep(0.25)
                 continue

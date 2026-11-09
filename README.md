@@ -17,7 +17,8 @@ show going through site outages without a human touching anything.
   - **One-shot games:** continuous auto sessions with pretend bet sizing that presses on wins.
     Dice at 6x, Limbo at 7x, Plinko in 5-ball bursts on max rows.
   - **Streak talk scales with the odds:** two 6x wins in a row is a tease, five is the clip of the night.
-  - **Commentary never stops play:** he talks over the rolling and holds at most one line in the queue.
+  - **Commentary never stops play:** lines, chat replies and ads play over the clicks; the next
+    round is planned while the current one runs. See [Feeling live](#feeling-live).
 - **Talks:** DeepSeek through Venice for the brain, ElevenLabs "Theo Silk" through Venice for the
   voice, with Rhubarb lip sync. He swears (18+ stream), roasts chat back, and mocks balance questions.
 - **Reads chat:**
@@ -86,11 +87,36 @@ flowchart LR
 | Brain | plans each round or auto session, writes reactions, answers chat by name with per-viewer memory | DeepSeek V4.1 Flash via Venice (Qwen3 235B fallback), JSON-schema tool calls |
 | Safety | scores every chat message (injection, harassment, spam, gambling harm), checks every line before it's voiced | Venice decisions classifier + regex rules |
 | Moderator | deletes links, injection attempts and hate; times out repeat offenders | Kick official API (bot account) |
-| Voice | voices lines, caches them, levels loudness | ElevenLabs Turbo v2.5 (Theo Silk) via Venice, ffmpeg |
+| Voice | voices lines (safety-checked in parallel), caches them, levels loudness; keeps a bank of pre-voiced interjections | ElevenLabs Turbo v2.5 (Theo Silk) via Venice, ffmpeg |
 | Puppet | animated Hubie from the official art: lip sync, blinks, expressions, reactions | Canvas 2D, Rhubarb Lip Sync, face parts made with Venice image edits |
 | Player | drives the real games: picks, bets, reads results, fails closed on any non-zero bet | Chrome extension (MV3) over a local websocket |
 | Watchdogs | spot a dead or frozen game window, site reloads, offline games; recover without a human | macOS window capture, page reload, game rotation |
 | Clipper | saves big hits as 16:9 and vertical 9:16 clips | OBS websocket + replay buffer, ffmpeg, Pillow |
+
+## Feeling live
+
+A written-and-voiced line takes 3 to 7 seconds (about 1.5 s to write, 2 to 5 s to voice). A human
+reacts in under one. Hubie hides the gap the way a video app shows a poster frame while the stream
+buffers:
+
+- **Instant interjections:** when a big moment lands (a hit, a hot streak, a deep run, a painful
+  bust) he blurts a pre-voiced line from a bank ("Oh, look at that!", "Steady, sloth. Steady.") at
+  once. The real line is written in parallel, told what he just blurted, and follows on from it. One
+  blurt per 20 s at most, never one of the last six, so they stay a reaction and not a tic.
+- **Lines written before they're needed:** in auto sessions, when one more win would make a streak
+  worth talking about, that line is written while the bet is still in the air (and voiced ahead for
+  the rare tiers), so it plays right on the hit.
+- **Play never waits on talk:** step games plan the next round during the current one, run lines
+  play over the next clicks (a line that's stale by the time it's ready is dropped for the result),
+  and the safety check runs alongside the voice render instead of before it.
+- **Measured, not guessed:** the runner logs every gap over 3 s where nothing moved in the game
+  (`timing: game idle ...`) and each line's write and voice time.
+
+On Mines this took dead air from 7 to 22 s every round to a few gaps of about 4 s in five minutes.
+
+We also timed other voices on Venice against the current one (same eight lines). ElevenLabs Theo
+Silk was fastest at 3.8 s a clip; MiniMax Speech-02 HD took about 5 s, Gemini 3.1 Flash TTS about
+7 s and Qwen3 TTS 26 s or more.
 
 ## Requirements
 
@@ -102,11 +128,17 @@ flowchart LR
 - Optional: a Kick app (client id/secret) and a bot account for chat replies and moderation; an
   OBS websocket password for auto-clips.
 
+| Environment variable | Needed for |
+|---|---|
+| `VENICE_API_KEY` | everything (brain, voice, safety, image edits) |
+| `KICK_CLIENT_ID`, `KICK_CLIENT_SECRET` | the Kick bot (chat posts, moderation) |
+| `OBS_WS_PASSWORD` | auto-clips |
+
 ## Run
 
 ```sh
 export VENICE_API_KEY=...            # or let run.sh read it from 1Password (`op`)
-./showrunner/run.sh --chat kick      # real Kick chat; no args = simulated chat
+./showrunner/run.sh --chat kick --kick-channel <your channel id>   # no args = simulated chat
 ```
 
 - `run.sh` restarts the show if it crashes, reusing the keys it already read.
@@ -168,7 +200,7 @@ Dice and Keno are off the vote menu for now: Housebets changed how their pages t
 - **Models and voice:** model fallbacks, voice speed.
 - **Pacing:** `fast_play`, `talk_from_x`, game rotation, chat reply rate.
 - **Safety and persona:** safety thresholds and the persona prompt (his voice, trash-talk rules, hard lines).
-- **Chat:** bot commands, catchphrases.
+- **Chat:** bot commands, catchphrases, and the instant interjection bank (`[interjections]`).
 - **Segments:** timed ads and reminders.
 - **Music:** volume, ducking and skip votes.
 
