@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hubie Puppet</title>
+<meta name="viewport" content="width=1920, height=1080">
+<style>
+  :root {
+    --navy: #1f2440;
+    --gold: #f2b33d;
+    --cream: #fbeee0;
+    --ink: #15131c;
+  }
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    background: transparent;
+  }
+  #stage {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1920px;
+    height: 1080px;
+  }
+  #debug {
+    position: absolute;
+    left: 16px;
+    top: 16px;
+    width: 340px;
+    padding: 12px;
+    background: rgba(21, 19, 28, 0.88);
+    color: #eee;
+    font: 13px/1.4 ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace;
+    border-radius: 8px;
+    display: none;
+  }
+  #debug h4 { margin: 8px 0 4px; font-size: 12px; color: var(--gold); text-transform: uppercase; }
+  #debug button {
+    margin: 2px 2px 2px 0;
+    padding: 4px 8px;
+    font: inherit;
+    color: var(--navy);
+    background: var(--cream);
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  #debug pre { margin: 8px 0 0; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<canvas id="stage" width="1920" height="1080"></canvas>
+<div id="debug"></div>
+<script src="puppet.js"></script>
+</body>
+</html>

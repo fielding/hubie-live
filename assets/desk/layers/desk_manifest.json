@@ -1,0 +1,408 @@
+{
+  "canvas": [
+    1312,
+    1199
+  ],
+  "source": "../hubie_desk.png",
+  "layers": [
+    {
+      "name": "body",
+      "file": "desk_body.png",
+      "parent": null,
+      "pivot": [
+        656,
+        1199
+      ]
+    },
+    {
+      "name": "head",
+      "file": "desk_head.png",
+      "parent": "body",
+      "pivot": [
+        662,
+        749
+      ],
+      "overlays": {
+        "mouth": {
+          "mouth_mid": {
+            "file": "face_mouth_mid.png",
+            "bbox": [
+              549,
+              543,
+              291,
+              130
+            ],
+            "source": "mouth_mid_6.png",
+            "ecc_shift_px": 0.01,
+            "drift": 0.719,
+            "seam": 3.05
+          },
+          "mouth_open": {
+            "file": "face_mouth_open.png",
+            "bbox": [
+              549,
+              543,
+              291,
+              130
+            ],
+            "source": "mouth_open_1.png",
+            "ecc_shift_px": 0.03,
+            "drift": 0.717,
+            "seam": 2.42
+          },
+          "mouth_laugh": {
+            "file": "face_mouth_laugh.png",
+            "bbox": [
+              544,
+              543,
+              296,
+              148
+            ],
+            "source": "mouth_laugh_1.png",
+            "ecc_shift_px": 0.11,
+            "drift": 0.797,
+            "seam": 4.22
+          },
+          "mouth_oo": {
+            "file": "face_mouth_oo.png",
+            "bbox": [
+              549,
+              543,
+              291,
+              130
+            ],
+            "source": "mouth_oo_1.png",
+            "ecc_shift_px": 0.05,
+            "drift": 0.787,
+            "seam": 3.26
+          },
+          "mouth_A": {
+            "file": "face_mouth_A.png",
+            "bbox": [
+              549,
+              543,
+              291,
+              130
+            ],
+            "source": "mouth_A_2.png",
+            "ecc_shift_px": 0.02,
+            "drift": 0.741,
+            "seam": 3.5
+          },
+          "mouth_B": {
+            "file": "face_mouth_B.png",
+            "bbox": [
+              549,
+              543,
+              291,
+              130
+            ],
+            "source": "mouth_B_3.png",
+            "ecc_shift_px": 0.02,
+            "drift": 0.801,
+            "seam": 3.03
+          },
+          "mouth_C": {
+            "file": "face_mouth_C.png",
+            "bbox": [
+              549,
+              543,
+              291,
+              130
+            ],
+            "source": "mouth_C_2.png",
+            "ecc_shift_px": 0.02,
+            "drift": 0.711,
+            "seam": 2.76
+          },
+          "mouth_E": {
+            "file": "face_mouth_E.png",
+            "bbox": [
+              549,
+              543,
+              291,
+              137
+            ],
+            "source": "mouth_E_3.png",
+            "ecc_shift_px": 0.02,
+            "drift": 0.849,
+            "seam": 3.2
+          },
+          "mouth_H": {
+            "file": "face_mouth_H.png",
+            "bbox": [
+              549,
+              543,
+              291,
+              130
+            ],
+            "source": "mouth_H_2.png",
+            "ecc_shift_px": 0.09,
+            "drift": 0.817,
+            "seam": 3.35
+          },
+          "mouth_smirk": {
+            "file": "face_mouth_smirk.png",
+            "bbox": [
+              549,
+              543,
+              291,
+              130
+            ],
+            "source": "mouth_smirk_1.png",
+            "ecc_shift_px": 0.63,
+            "drift": 2.435,
+            "seam": 2.94
+          },
+          "mouth_grimace": {
+            "file": "face_mouth_grimace.png",
+            "bbox": [
+              539,
+              543,
+              301,
+              130
+            ],
+            "source": "mouth_grimace_1.png",
+            "ecc_shift_px": 9.67,
+            "drift": 19.34,
+            "seam": 3.68
+          },
+          "mouth_frown": {
+            "file": "face_mouth_frown.png",
+            "bbox": [
+              549,
+              543,
+              291,
+              130
+            ],
+            "source": "mouth_frown_1.png",
+            "ecc_shift_px": 0.14,
+            "drift": 1.089,
+            "seam": 3.85
+          }
+        },
+        "eyes": {
+          "eyes_closed": {
+            "file": "face_eyes_closed.png",
+            "bbox": [
+              481,
+              453,
+              409,
+              116
+            ],
+            "source": "eyes_closed_1.png",
+            "ecc_shift_px": 0.04,
+            "drift": 0.664,
+            "seam": 3.38
+          },
+          "eyes_wide": {
+            "file": "face_eyes_wide.png",
+            "bbox": [
+              481,
+              443,
+              409,
+              126
+            ],
+            "source": "eyes_wide_1.png",
+            "ecc_shift_px": 0.02,
+            "drift": 0.683,
+            "seam": 4.5
+          },
+          "eyes_happy": {
+            "file": "face_eyes_happy.png",
+            "bbox": [
+              481,
+              453,
+              409,
+              116
+            ],
+            "source": "eyes_happy_3.png",
+            "ecc_shift_px": 0.0,
+            "drift": 0.702,
+            "seam": 5.03
+          },
+          "eyes_look_left": {
+            "file": "face_eyes_look_left.png",
+            "bbox": [
+              481,
+              447,
+              409,
+              122
+            ],
+            "source": "eyes_look_left_6.png",
+            "ecc_shift_px": 0.08,
+            "drift": 0.79,
+            "seam": 3.3
+          },
+          "eyes_look_right": {
+            "file": "face_eyes_look_right.png",
+            "bbox": [
+              481,
+              449,
+              409,
+              120
+            ],
+            "source": "eyes_look_right_2.png",
+            "ecc_shift_px": 0.47,
+            "drift": 0.735,
+            "seam": 4.61
+          },
+          "eyes_half": {
+            "file": "face_eyes_half.png",
+            "bbox": [
+              481,
+              453,
+              409,
+              116
+            ],
+            "source": "eyes_half_3.png",
+            "ecc_shift_px": 0.53,
+            "drift": 1.54,
+            "seam": 2.94
+          },
+          "eyes_squint": {
+            "file": "face_eyes_squint.png",
+            "bbox": [
+              471,
+              420,
+              419,
+              149
+            ],
+            "source": "eyes_squint_4.png",
+            "ecc_shift_px": 0.4,
+            "drift": 1.815,
+            "seam": 12.92
+          },
+          "eyes_roll": {
+            "file": "face_eyes_roll.png",
+            "bbox": [
+              481,
+              445,
+              409,
+              124
+            ],
+            "source": "eyes_roll_1.png",
+            "ecc_shift_px": 0.14,
+            "drift": 0.942,
+            "seam": 4.31
+          },
+          "eyes_sad": {
+            "file": "face_eyes_sad.png",
+            "bbox": [
+              445,
+              419,
+              460,
+              150
+            ],
+            "source": "eyes_sad_10.png",
+            "ecc_shift_px": 0.09,
+            "drift": 1.235,
+            "seam": 6.97
+          }
+        }
+      },
+      "overlay_rules": "At most one overlay per group is drawn, in the head's coordinate space; none = base face. Draw the eyes group before the mouth group. Cut regions are larger than the edit request ellipses so the base smile corners and lash tips are fully covered."
+    },
+    {
+      "name": "hat",
+      "file": "desk_hat.png",
+      "parent": "head",
+      "pivot": [
+        608,
+        371
+      ]
+    }
+  ],
+  "desk": {
+    "torso_cut_y": 1126,
+    "arms": {
+      "file": "desk_arms.png",
+      "note": "hands, cuffs and outer sleeves; drawn again over the desk surface"
+    },
+    "arm_regions": [
+      [
+        [
+          40,
+          960
+        ],
+        [
+          390,
+          960
+        ],
+        [
+          522,
+          1050
+        ],
+        [
+          522,
+          1199
+        ],
+        [
+          40,
+          1199
+        ]
+      ],
+      [
+        [
+          796,
+          1050
+        ],
+        [
+          930,
+          960
+        ],
+        [
+          1272,
+          960
+        ],
+        [
+          1272,
+          1199
+        ],
+        [
+          796,
+          1199
+        ]
+      ]
+    ],
+    "torso_extension": {
+      "file": "desk_torso_ext.png",
+      "y": 1112,
+      "note": "drawn under the body, behind the desk surface"
+    },
+    "note": "The body is drawn clipped above the desk's back edge (torso, behind the desk), then desk_arms.png over the desk surface. arm_regions is a coarse fallback if desk_arms.png is missing.",
+    "scene": {
+      "rear": "desk_scene_rear.png",
+      "back": "desk_scene_back.png",
+      "front": "desk_scene_front.png",
+      "x": -482.98,
+      "y": -640.15,
+      "scale": 2.778,
+      "back_y": 1026.7,
+      "front_y": 1229.4,
+      "bottom_y": 2093.4,
+      "left_x": -483.0,
+      "right_x": 5550.8
+    },
+    "hands": {
+      "left": "desk_hand_left.png",
+      "right": "desk_hand_right.png",
+      "static_arms": "desk_arms_static.png",
+      "note": "typing animation: hands move over the static arms"
+    }
+  },
+  "poses": {
+    "hands_behind_head": {
+      "file": "desk_pose_hands_behind_head.png",
+      "source": "pose_hands_behind_head_2.png",
+      "scale": 1.011,
+      "head_residual": 8.5
+    },
+    "arms_up": {
+      "file": "desk_pose_arms_up.png",
+      "source": "pose_arms_up_2.png",
+      "scale": 0.995,
+      "head_residual": 5.9
+    }
+  }
+}

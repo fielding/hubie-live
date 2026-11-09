@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hubie Live</title>
+<meta name="viewport" content="width=1920, height=1080">
+<!--
+  The live scene, as one OBS browser source (1920x1080, "Control audio via OBS" on).
+  Back to front: room art, game monitor (frame + live game view in its screen), chat
+  panel, Hubie with his desk and chair (puppet), live HUD text, safety banner.
+  Every live layer is its own page talking to the show runner, so any of them can also
+  be its own OBS source. Coordinates of the HUD's room layout match the art placed here.
+  ?demo=1 feeds the HUD made-up chat/stats/votes (for layout work without the show runner).
+
+  Real-site games: OBS stacks three sources so the actual Housebets window sits inside the
+  monitor, under its bezel:
+    1. live.html?part=under   room, rug, monitor frame (back)        browser source 1920x1080
+    2. window capture of the Housebets stream window, placed in the screen (880,87 843x501)
+    3. live.html?part=over    bezel, chat, Hubie, crate, HUD          browser source 1920x1080,
+                                                                     transparent, audio via OBS
+  With no part= the page is the whole scene with the simulated game view (local preview).
+-->
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+  html:has(body.over) { background: transparent; }
+  /* The scene is authored at 1920x1080 (OBS renders it 1:1); in a browser window it is scaled
+     to fit and centered so the whole stream is always visible. */
+  #scene { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden;
+           background: #0d0b14; transform-origin: 0 0; }
+  img, iframe { position: absolute; border: 0; background: transparent; display: block; }
+  .full { left: 0; top: 0; width: 1920px; height: 1080px; }
+  #room { left: 0; top: 0; width: 1920px; height: 1080px; }
+  /* Game monitor, sandwiched: the full frame behind, the game, then the same frame with its screen cut
+     out (game_frame_top.png) on top, so the bezel overlaps the game's edges like a real monitor.
+     Art 1536x1024 at 910 wide; the screen opening (66,79)-(1467,903) lands at 886,93-1717,582. */
+  #frame, #frametop { left: 847px; top: 46px; width: 910px; }
+  #game { left: 880px; top: 87px; width: 843px; height: 501px; }
+  /* Rug on the floor, partly behind the desk; crate in front of the console's right end. */
+  #rug { left: 792px; top: 990px; width: 873px; }
+  #crate { left: 1690px; top: 852px; width: 330px; }
+  /* Chat panel: art 1024x1536 at 345 wide; windows land at 485,47-755,126 and 489,144-758,476. */
+  #panel { left: 451px; top: 7px; width: 345px; }
+  /* part=under: only what's behind the game window; part=over: only what's in front of it. */
+  body.under #frametop, body.under #panel, body.under #puppet, body.under #crate, body.under #hud,
+  body.under #game { display: none; }
+  body.over #game { z-index: 0; }
+  body.over #room, body.over #rug, body.over #frame { display: none; }
+  body.over, body.over #scene { background: transparent; }
+</style>
+</head>
+<body>
+<div id="scene">
+<img id="room" src="../assets/scene/room_background.png" alt="">
+<img id="rug" src="../assets/scene/rug.png" alt="">
+<img id="frame" src="../assets/scene/game_frame.png" alt="">
+<iframe id="game" src="../showrunner/view/index.html"></iframe>
+<img id="frametop" src="../assets/scene/game_frame_top.png" alt="">
+<img id="panel" src="../assets/scene/chat_panel.png" alt="">
+<iframe class="full" id="puppet" src="../puppet/index.html?x=367&amp;y=1075&amp;scale=0.316&amp;look=right" allow="autoplay"></iframe>
+<img id="crate" src="../assets/scene/crate.png" alt="">
+<iframe class="full" id="hud"></iframe>
+<!-- Safety banner (../overlay/banner.html) removed from the scene for now. -->
+</div>
+<script>
+  // Fit the 1920x1080 scene into the window (exactly 1:1 in a 1920x1080 OBS source).
+  const scene = document.getElementById('scene');
+  function fit() {
+    const k = Math.min(innerWidth / 1920, innerHeight / 1080);
+    scene.style.transform = `translate(${(innerWidth - 1920 * k) / 2}px, ${(innerHeight - 1080 * k) / 2}px) scale(${k})`;
+  }
+  addEventListener('resize', fit);
+  fit();
+  const part = new URLSearchParams(location.search).get('part');
+  if (part === 'under' || part === 'over') document.body.classList.add(part);
+  // Each part is its own OBS source; only the front one runs Hubie and the HUD.
+  if (part === 'under') { document.getElementById('puppet').src = 'about:blank'; }
+  // In front of the site window the game view only draws for simulated games (and the switch card).
+  if (part === 'over') document.getElementById('game').src = '../showrunner/view/index.html?realsite=1';
+  // Only wiring: pass ?demo=1 through to the HUD for layout work.
+  if (part !== 'under') document.getElementById('hud').src = '../overlay/hud.html?layout=room' +
+    (new URLSearchParams(location.search).get('demo') === '1' ? '&demo=1' : '');
+
+  // Background music (front part only, so OBS hears it once): shuffles assets/music/, ducks
+  // under Hubie's voice, reports each track so the HUD and !song can credit it.
+  if (part !== 'under') (function music() {
+    const el = new Audio();
+    let cfg = { volume: 0, duck_to: 0, tracks: [] }, queue = [], talking = 0, level = 0, current = null;
+    const peek = () => { if (!queue.length && cfg.tracks && cfg.tracks.length) queue = shuffle(cfg.tracks.slice()); return queue[0] ? queue[0].file : ''; };
+    const report = () => current && fetch('/music/now', { method: 'POST', body: JSON.stringify({ file: current, next: peek() }) }).catch(() => {});
+    const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+    async function load() {
+      try { cfg = await (await fetch('/music/playlist.json', { cache: 'no-store' })).json(); } catch (_) { /* runner down */ }
+    }
+    // One "next track" at a time: a failed load used to schedule two retries (error event and the
+    // rejected play()), so during an outage the retries doubled every couple of seconds and all
+    // fired when the show came back (thousands of track changes). Every path goes through one timer
+    // and a generation number, so stale callbacks do nothing.
+    let gen = 0, timer = 0;
+    const schedule = (ms) => { clearTimeout(timer); timer = setTimeout(next, ms); };
+    async function next() {
+      clearTimeout(timer);
+      const my = ++gen;
+      await load();
+      if (my !== gen) return;
+      if (!cfg.tracks || !cfg.tracks.length || !(cfg.volume > 0)) { schedule(15000); return; }
+      if (!queue.length) queue = shuffle(cfg.tracks.slice());
+      const t = queue.shift();
+      el.src = '../assets/music/' + encodeURIComponent(t.file);
+      el.play().catch(() => { if (my === gen) schedule(5000); });
+      current = t.file;
+      report();
+    }
+    el.onended = () => schedule(0);
+    el.onerror = () => schedule(2000);
+    // Smooth ducking: ease toward the target level instead of jumping.
+    setInterval(() => {
+      const target = !(cfg.volume > 0) ? 0 : talking ? cfg.duck_to : cfg.volume;
+      level += (target - level) * 0.25;
+      el.volume = Math.max(0, Math.min(1, level));
+      if (!(cfg.volume > 0) && !el.paused) el.pause();
+    }, 50);
+    setInterval(async () => {          // pick up volume changes in config.toml (and new tracks)
+      if (!el.paused) report();       // re-announce, so a restarted runner knows the track
+      const was = cfg.volume; await load();
+      if (!(was > 0) && cfg.volume > 0 && el.paused) schedule(0);
+    }, 20000);
+    const hook = () => {
+      try {
+        const w = document.getElementById('puppet').contentWindow;
+        w.addEventListener('hubie:speech', (e) => {
+          const ph = e.detail && e.detail.phase;
+          if (ph === 'start') talking++; else if (ph === 'end') talking = Math.max(0, talking - 1);
+        });
+      } catch (_) { /* not same-origin: no ducking */ }
+    };
+    // Chat's !skip arrives on the HUD socket from the show runner.
+    (function listen() {
+      let ws;
+      try { ws = new WebSocket('ws://127.0.0.1:8767'); } catch (_) { setTimeout(listen, 3000); return; }
+      ws.onmessage = (ev) => {
+        try { if (JSON.parse(ev.data).type === 'music_skip' && !el.paused) schedule(0); } catch (_) { /* not ours */ }
+      };
+      ws.onclose = () => setTimeout(listen, 3000);
+    })();
+    document.getElementById('puppet').addEventListener('load', hook);
+    hook();
+    next();
+  })();
+</script>
+</body>
+</html>
