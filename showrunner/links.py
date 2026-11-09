@@ -137,6 +137,7 @@ class BridgeLink(Broadcast):
         self.last_load = 0.0          # when a game page last loaded (top frame)
         self.last_nav_cmd = 0.0       # when we last asked the extension to navigate
         self.site_reloads = 0         # page loads we didn't ask for, this run
+        self.stream_tab = None        # tab id the extension plays in, learned from its replies
         self.snapshots: dict[str, dict] = {}       # frame url -> latest snapshot
         self._waiting: dict[str, asyncio.Future] = {}
         self._ids = itertools.count(1)
@@ -160,7 +161,10 @@ class BridgeLink(Broadcast):
             (self.probe_dir / f"{name}.json").write_text(json.dumps(m, indent=1))
         elif kind in ("status", "loaded", "error"):
             log.info("bridge %s: %s", kind, json.dumps({k: v for k, v in m.items() if k != "type"})[:600])
-            if kind == "loaded" and m.get("top") and not m.get("reinjected"):
+            # Only the stream tab counts: the extension reports loads from every Housebets tab, and a
+            # person browsing the site in another tab isn't the stream reloading.
+            if kind == "loaded" and m.get("top") and not m.get("reinjected") and \
+                    (self.stream_tab is None or m.get("tab") == self.stream_tab):
                 self.last_load = time.time()        # any page load (ours, a switch, the site's own)
                 # Ours = we asked for a navigation in the last 30 s. Anything else is the site (or a
                 # person) reloading the page: logged so outages can be blamed on the right side.
@@ -169,6 +173,8 @@ class BridgeLink(Broadcast):
                     log.warning("site reloaded the page itself (nav=%s, #%d this run): %s",
                                 m.get("nav"), self.site_reloads, m.get("url"))
         elif kind == "done":
+            if m.get("tab") and m.get("ok"):
+                self.stream_tab = m["tab"]          # the tab the extension plays in (its replies say)
             fut = self._waiting.pop(m.get("id"), None)
             if fut and not fut.done():
                 fut.set_result(m)
