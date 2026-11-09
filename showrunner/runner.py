@@ -39,6 +39,10 @@ PAGE_REFRESH_S = 3 * 3600
 CHECK_IN_ANGLES = ("how this session is going", "something a chatter said earlier, or ask chat something",
                    "chasing the stream record", "life on Fielding's couch", "the music that's playing",
                    "this game itself and why you like or hate it", "a hot take about degen life")
+CHAT_ANGLES = ("a question for chat about their night", "calling out the lurkers to say hi",
+               "a would-you-rather for chat", "asking chat for a song or a hot take", "roasting a recent chatter (playfully)",
+               "asking chat to pick your next game with a vote", "a story about life on Fielding's couch, then ask chat theirs",
+               "asking chat what they'd do with your record multiplier")
 CLIP_MIN_X = 500               # hits this big get auto-clipped (a game can raise its own bar: clip_x)
 CLIP_HYPE = ("this moment just got clipped for the highlight reel: hype it up, tell chat to share the clip, "
              "act like a streamer who knows this one's going viral")
@@ -441,7 +445,10 @@ class Runner:
                     streak, units, dry = 0, 1.0, dry + 1
                 self._ladder = {"units": units, "streak": streak, "left": None}
                 await self.push_stats()
-                self.recent.append(f"{g.title}: {json.dumps(ev)}")
+                # Not every bet goes into his short memory (12 items): it pushed his own recent lines
+                # out, so he couldn't see he was repeating himself. Wins and big moments only.
+                if won or float(ev.get("multiplier") or 0) >= cfg.talk_from_x:
+                    self.recent.append(f"{g.title}: {json.dumps({k: ev[k] for k in ('kind', 'multiplier') if k in ev})}")
                 m = float(ev.get("multiplier") or 0)
                 best_hit = max(best_hit, m)
                 p_win = g.win_chance(action) if hasattr(g, "win_chance") else (wins + 1) / (played + 2)
@@ -479,10 +486,18 @@ class Runner:
                     # A check-in every 30 bets, and on slow games (Wheel) whenever he's gone quiet. Each
                     # gets a different angle so the filler doesn't become "N spins, nothing" on repeat.
                     self._last_line_at = time.time()          # don't re-trigger while the line is written
-                    check = {"kind": "check_in", "bets_so_far": played, "best_hit_so_far": best_hit,
-                             "talk_about": random.choice(CHECK_IN_ANGLES)}
-                    if getattr(g, "streak_talk", True):
-                        check.update(wins=wins, biggest_bet_units=round(peak_units, 2), bets_since_last_win=dry)
+                    if played % 30 != 0 and random.random() < 0.7:
+                        # Chat time: no spin counts to narrate, a nudge to get chat talking instead.
+                        names = list(dict.fromkeys(line.split(":", 1)[0] for _, line in reversed(self.chat_log)))[:4]
+                        check = {"kind": "chat_time", "recent_chatters": names,
+                                 "talk_about": random.choice(CHAT_ANGLES),
+                                 "note": "Don't recap spins, droughts or the wheel. Talk TO chat: ask something, "
+                                         "call a recent chatter out by name, or start a bit they can answer."}
+                    else:
+                        check = {"kind": "check_in", "bets_so_far": played, "best_hit_so_far": best_hit,
+                                 "talk_about": random.choice(CHECK_IN_ANGLES)}
+                        if getattr(g, "streak_talk", True):
+                            check.update(wins=wins, biggest_bet_units=round(peak_units, 2), bets_since_last_win=dry)
                     self._in_background(self._talk(g, check))
                 await asyncio.sleep(0.35)
         finally:

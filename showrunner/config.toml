@@ -183,7 +183,7 @@ reaction = "hat_tip"
 [[segments]]
 id = "ask_chat"
 enabled = true
-every_minutes = 6
+every_minutes = 4
 seconds = 4
 say = ["Alright chat, talk to me. What's everybody up to tonight?",
        "Chat, I need music recommendations. What should a sloth be vibing to right now?",
