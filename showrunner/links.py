@@ -31,6 +31,7 @@ class Broadcast:
             except (ValueError, OSError):
                 pass
         self.on_message = None
+        self._wants_sender = False
         self.max_incoming = 65536                # pages only send small control messages
 
     async def handler(self, ws):
@@ -42,9 +43,10 @@ class Broadcast:
             async for raw in ws:
                 if self.on_message and isinstance(raw, str) and len(raw) < self.max_incoming:
                     try:
-                        self.on_message(json.loads(raw))
+                        msg = json.loads(raw)
                     except ValueError:
-                        pass
+                        continue
+                    self.on_message(msg, ws) if self._wants_sender else self.on_message(msg)
         except websockets.ConnectionClosed:
             pass
         finally:
@@ -140,9 +142,14 @@ class BridgeLink(Broadcast):
         self.stream_tab = None        # tab id the extension plays in, learned from its replies
         self.site_reload_at = 0.0     # when the site last reloaded the stream page on its own
         self.snapshots: dict[str, dict] = {}       # frame url -> latest snapshot
-        self._waiting: dict[str, asyncio.Future] = {}
+        self._waiting: dict[str, tuple[asyncio.Future, int, list]] = {}   # id -> (reply, clients asked, failures)
         self._ids = itertools.count(1)
         self.on_message = self._incoming
+        self._wants_sender = True
+        # The extension in the Chrome that holds the game tab. Another Chrome profile with the extension
+        # installed connects too; it has no game tab, and its errors ("could not open") used to win the
+        # race and bench every game. Commands go to the home extension once it's known.
+        self.home = None
 
     async def handler(self, ws):
         # Any web page can open a socket to localhost; only our extension may drive the site.
@@ -153,8 +160,13 @@ class BridgeLink(Broadcast):
             return
         await super().handler(ws)
 
-    def _incoming(self, m: dict):
+    def _incoming(self, m: dict, ws=None):
         kind = m.get("type")
+        if ws is not None and ((kind == "status" and m.get("tabs")) or (kind == "loaded" and m.get("top"))
+                               or (kind == "done" and m.get("ok") and m.get("tab"))):
+            if self.home is not ws:
+                log.info("bridge: home extension is client %s", id(ws) % 10_000)
+            self.home = ws
         if kind == "snapshot":
             self.snapshots[m.get("url", "?")] = m
             self.probe_dir.mkdir(exist_ok=True)
@@ -177,9 +189,17 @@ class BridgeLink(Broadcast):
         elif kind == "done":
             if m.get("tab") and m.get("ok"):
                 self.stream_tab = m["tab"]          # the tab the extension plays in (its replies say)
-            fut = self._waiting.pop(m.get("id"), None)
-            if fut and not fut.done():
-                fut.set_result(m)
+            entry = self._waiting.get(m.get("id"))
+            if not entry:
+                return
+            fut, asked, failures = entry
+            # First success wins; a failure counts only once every extension asked has failed.
+            if m.get("ok") or len(failures) + 1 >= asked:
+                self._waiting.pop(m.get("id"), None)
+                if not fut.done():
+                    fut.set_result(m if m.get("ok") or not failures else failures[0])
+            else:
+                failures.append(m)
 
     async def request(self, msg: dict, timeout: float = 5.0) -> dict | None:
         """Send one command to the page and wait for its reply ({"ok":..., "data":...})."""
@@ -189,8 +209,14 @@ class BridgeLink(Broadcast):
             self.last_nav_cmd = time.time()
         cid = f"b-{next(self._ids)}"
         fut = asyncio.get_running_loop().create_future()
-        self._waiting[cid] = fut
-        await self.send({**msg, "id": cid})
+        targets = [self.home] if self.home in self.clients else list(self.clients)
+        self._waiting[cid] = (fut, len(targets), [])
+        data = json.dumps({**msg, "id": cid})
+        for ws in targets:
+            try:
+                await ws.send(data)
+            except Exception:
+                self.clients.discard(ws)
         try:
             return await asyncio.wait_for(fut, timeout)
         except asyncio.TimeoutError:
