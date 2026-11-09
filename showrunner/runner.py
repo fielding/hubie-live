@@ -444,6 +444,15 @@ class Runner:
             return g.step_action()
         return {"type": next(a["type"] for a in g.legal_actions() if a["type"] != "cashout")}
 
+    def _recent_chatters(self, minutes: float = 10) -> list[str]:
+        """Who's actually around: chatters from the last few minutes, each with their latest line.
+        Old names (a viewer who left an hour ago) got called out like they were still here."""
+        cutoff, seen = time.time() - minutes * 60, {}
+        for user, line, at in reversed(self.chat_log):
+            if at >= cutoff and user not in seen:
+                seen[user] = line
+        return list(seen.values())[:4]
+
     def _business(self):
         """Between-move business (chat replies, ads and reminders, a word on a new track) runs in the
         background while play goes on, one thing at a time."""
@@ -682,11 +691,12 @@ class Runner:
                     self._last_line_at = time.time()          # don't re-trigger while the line is written
                     if played % 30 != 0 and random.random() < 0.7:
                         # Chat time: no spin counts to narrate, a nudge to get chat talking instead.
-                        names = list(dict.fromkeys(line.split(":", 1)[0] for _, line in reversed(self.chat_log)))[:4]
+                        names = self._recent_chatters()
                         check = {"kind": "chat_time", "recent_chatters": names,
                                  "talk_about": BAG.draw(CHAT_ANGLES),
                                  "note": "Don't recap spins, droughts or the wheel. Talk TO chat: ask something, "
-                                         "call a recent chatter out by name, or start a bit they can answer."}
+                                         "call out a chatter from recent_chatters by name (only about what they actually said), or start "
+                                         "a bit they can answer. If recent_chatters is empty, chat is quiet: talk to the room."}
                     else:
                         check = {"kind": "check_in", "bets_so_far": played, "best_hit_so_far": best_hit,
                                  "talk_about": BAG.draw(CHECK_IN_ANGLES)}
@@ -764,7 +774,7 @@ class Runner:
                 if roll < 0.35:
                     check = {"kind": "drought", "spins_without_a_hit": spin}
                 elif roll < 0.7:
-                    names = list(dict.fromkeys(line.split(":", 1)[0] for _, line in reversed(self.chat_log)))[:4]
+                    names = self._recent_chatters()
                     check = {"kind": "chat_time", "recent_chatters": names, "talk_about": BAG.draw(CHAT_ANGLES),
                              "note": "Don't mention the spins or the drought. Talk TO chat."}
                 else:
@@ -1202,7 +1212,7 @@ class Runner:
                                  "vote": bool(self.games.commands().get(cmd))}, keep=True)
             await self._push_votes()
         elif v.action in ("reply", "show"):
-            self.chat_log.append((msg.user.lower(), f"{msg.user}: {normalize(msg.text)[:120]}"))
+            self.chat_log.append((msg.user.lower(), f"{msg.user}: {normalize(msg.text)[:120]}", time.time()))
             await self.hud.send({"type": "chat", "id": msg.id, "user": msg.user, "text": normalize(msg.text)}, keep=True)
             if v.action == "reply":
                 self._queue_reply(msg, v)
@@ -1251,7 +1261,7 @@ class Runner:
         Hubie's next gap instead of costing a few seconds of dead air then."""
         key = msg.user.lower()
         thread = self.threads.get(key, ())
-        others = [line for _, line in list(self.chat_log)[:-1]][-6:]   # [-1] is this message
+        others = [line for _, line, _ in list(self.chat_log)[:-1]][-6:]   # [-1] is this message
         task = asyncio.create_task(self._think(self.brain.chat_reply(
             msg.user if v.speak_name else None, normalize(msg.text), self.game.title,
             list(thread), others, list(self.recent))))
