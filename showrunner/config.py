@@ -35,6 +35,7 @@ class Config:
     voice_speed: float
     fast_play: bool                    # real-site games: plan once, play fast, talk only when it's worth it
     talk_from_x: float                 # fast play: runs/hits below this multiplier go by without commentary
+    max_quiet_seconds: float           # auto sessions: say something if he's been quiet this long (0 = off)
     rotate_minutes: float              # switch games on his own after this long with no votes (0 = never)
     music_volume: float                # background music level, 0-1 (0 = off)
     music_duck: float                  # music level while Hubie talks, 0-1
@@ -141,6 +142,7 @@ def parse(raw: dict) -> Config:
         primary_timeout=_num(m, "primary_timeout_seconds", 2, 30, 7), voice_speed=_num(voice, "speed", 0.7, 1.3, 1.0),
         fallback_voice=bool(voice.get("fallback_voice", False)),
         rotate_minutes=_num(pace, "rotate_minutes", 0, 1440, 25),
+        max_quiet_seconds=_num(pace, "max_quiet_seconds", 0, 600, 40),
         fast_play=bool(pace.get("fast_play", True)),
         talk_from_x=_num(pace, "talk_from_x", 1.5, 1000, 5),
         music_volume=_num(raw.get("music", {}), "volume", 0, 1, 0.25),

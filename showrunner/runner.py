@@ -36,6 +36,9 @@ SCREEN_CHECK_S = 30
 # Reload the game page this often, between rounds, so it never goes stale. (Housebets also reloads
 # its own page at irregular times, 13-35 min apart on 2026-11-08; games retry through those.)
 PAGE_REFRESH_S = 3 * 3600
+CHECK_IN_ANGLES = ("how this session is going", "something a chatter said earlier, or ask chat something",
+                   "chasing the stream record", "life on Fielding's couch", "the music that's playing",
+                   "this game itself and why you like or hate it", "a hot take about degen life")
 CLIP_MIN_X = 500               # hits this big get auto-clipped (a game can raise its own bar: clip_x)
 CLIP_HYPE = ("this moment just got clipped for the highlight reel: hype it up, tell chat to share the clip, "
              "act like a streamer who knows this one's going viral")
@@ -61,6 +64,7 @@ class Runner:
         self.chat_log: collections.deque = collections.deque(maxlen=8)
         self._page_loaded_at = time.time()
         self._catch_at = 0.0
+        self._last_line_at = time.time()
         self.clipper = clipper_mod.Clipper(Path.home() / "Movies" / "Hubie Clips")
         self._screen_reloads: list[float] = []
         self._face_at = 0.0
@@ -175,6 +179,7 @@ class Runner:
             if not noted:
                 self.recent.append(f"Hubie said: {line}")
             ok = await self.puppet.say(clips, expression)
+            self._last_line_at = time.time()
             self._relax_face(expression)
             await asyncio.sleep(self.config.current.line_gap)   # a breath before anything else
             return ok
@@ -469,8 +474,13 @@ class Runner:
                     self._in_background(self._talk(g, ev))
                 elif not won and broken >= 2 and p_win ** broken <= 0.005 and getattr(g, "streak_talk", True):
                     self._in_background(self._talk(g, {"kind": "streak_broken", "streak_was": broken}))
-                elif played % 30 == 0:
-                    check = {"kind": "check_in", "bets_so_far": played, "best_hit_so_far": best_hit}
+                elif played % 30 == 0 or (self.config.current.max_quiet_seconds and
+                                          time.time() - self._last_line_at > self.config.current.max_quiet_seconds):
+                    # A check-in every 30 bets, and on slow games (Wheel) whenever he's gone quiet. Each
+                    # gets a different angle so the filler doesn't become "N spins, nothing" on repeat.
+                    self._last_line_at = time.time()          # don't re-trigger while the line is written
+                    check = {"kind": "check_in", "bets_so_far": played, "best_hit_so_far": best_hit,
+                             "talk_about": random.choice(CHECK_IN_ANGLES)}
                     if getattr(g, "streak_talk", True):
                         check.update(wins=wins, biggest_bet_units=round(peak_units, 2), bets_since_last_win=dry)
                     self._in_background(self._talk(g, check))

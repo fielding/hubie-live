@@ -25,6 +25,7 @@ fallback_voice = false      # true: lines Theo Silk's filter refuses are said by
 [pacing]
 fast_play = true            # real-site games: plan each round once and play it out fast (dice/limbo/etc. in auto sessions)
 talk_from_x = 5             # fast play: only runs and hits from this multiplier up get commentary
+max_quiet_seconds = 40      # auto sessions (wheel, plinko...): a word if he's been quiet this long (0 = off)
 rotate_minutes = 25         # with no chat votes, Hubie switches to another game after this long (0 = never)
 chat_reply_every_seconds = 5
 vote_window_seconds = 60     # voting opens on the first !<game> vote and runs this long
