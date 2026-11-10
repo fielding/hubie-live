@@ -91,6 +91,10 @@ class HousebetsLimbo(HousebetsGame):
         if not m:
             raise SiteError(f"unreadable result {result!r}")
         crash, won = float(m.group(1).replace(",", "")), m.group(2) == "won"
+        # The result must fit the target we think we set (Dice once showed 6x while rolling 50:50).
+        if won != (crash >= float(target)):
+            await self.snapshot_page(f"limbo result doesn't fit a {target}x target: {result!r}")
+            raise SiteError(f"limbo isn't playing a {target}x target (got {result!r})")
         self.round = {"target": target, "result": crash, "won": won}
         return {"kind": "win" if won else "loss", "result": crash, "target": target,
                 "multiplier": target, "bet": 0, "payout": 0}

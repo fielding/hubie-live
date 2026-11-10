@@ -15,7 +15,10 @@ SEL = {
     "mult": 'input[aria-labelledby="hd-g-lbl-mult"]',
     "mode": 'button[data-mode="{side}"]',
     "chips": ".hd-g-chip",
-    "slider": 'input[type="range"]',
+    "target": 'input[aria-labelledby="hd-g-lbl-target"]',
+    # The game's own state: the box values show whatever was typed even when the game ignores it,
+    # but the slider handle's aria-valuenow is the roll target it will actually play.
+    "thumb": 'div[role="slider"][aria-label="Roll target"]',
 }
 # Win chance %. Fielding's call (2026-11-08): dice is played at 6x (99/6 = 16.5%), which makes
 # streaks rare enough to be exciting under the auto-session ladder.
@@ -64,13 +67,14 @@ class HousebetsDice(HousebetsGame):
 
     async def _enter_chance(self, chance: float, side: str, want: float, payout):
         """Get the game to take the win chance, trying each way in until its payout readout agrees."""
-        slider = {"over": 100 - chance, "under": chance}[side]
+        target = {"over": 100 - chance, "under": chance}[side]
         methods = {
+            "target box": lambda: self.set_value(SEL["target"], f"{target:g}"),
+            "target box, typed": lambda: self.set_value(SEL["target"], f"{target:g}", typed=True),
+            "slider keys": lambda: self._step_slider(target),
             "chance box": lambda: self.set_value(SEL["chance"], chance),
             "payout box": lambda: self.set_value(SEL["mult"], f"{want:g}"),
             "chance box, typed": lambda: self.set_value(SEL["chance"], chance, typed=True),
-            "payout box, typed": lambda: self.set_value(SEL["mult"], f"{want:g}", typed=True),
-            "slider": lambda: self.set_value(SEL["slider"], f"{slider:g}"),
         }
         order = ([type(self)._method] if type(self)._method in methods else []) + \
             [m for m in methods if m != type(self)._method]
@@ -90,6 +94,32 @@ class HousebetsDice(HousebetsGame):
         await self.snapshot_page(f"dice ignored every way of setting a {chance}% win chance (payout {await payout()})")
         raise SiteError(f"dice won't take a {chance}% win chance")
 
+    async def _step_slider(self, target: float):
+        """Walk the slider handle to the target with arrow keys (big steps first), reading its value."""
+        async def now():
+            got = await self.query(SEL["thumb"])
+            return float(got[0]["attrs"].get("aria-valuenow"))
+        for _ in range(60):
+            gap = target - await now()
+            if abs(gap) < 0.005:
+                return
+            key = "ArrowRight" if gap > 0 else "ArrowLeft"
+            before = await now()
+            r = await self.bridge.request({"type": "key", "scope": "game", "selector": SEL["thumb"], "key": key,
+                                           "times": 1})
+            if not r or not r.get("ok"):
+                raise SiteError("slider didn't take keys")
+            step = abs(await now() - before)
+            if step == 0:
+                raise SiteError("slider didn't move")
+            n = int(abs(gap) // step)
+            if n > 1:                                 # jump most of the way in one message
+                await self.bridge.request({"type": "key", "scope": "game", "selector": SEL["thumb"], "key": key,
+                                           "times": n - 1})
+            elif abs(gap) < step:
+                return                                # as close as this slider's step allows
+        raise SiteError("slider never reached the target")
+
     async def _chips(self) -> list[str]:
         return [c["attrs"].get("aria-label", "") for c in await self.query(SEL["chips"])]
 
@@ -105,12 +135,22 @@ class HousebetsDice(HousebetsGame):
         # (a value typed into the box but never committed left it rolling 50:50).
         want = round(99 / chance, 2)
 
-        async def payout():
-            got = await self.query(SEL["mult"])
+        async def box(sel):
+            got = await self.query(sel)
             try:
                 return float(got[0]["value"]) if got else 0.0
             except (TypeError, ValueError):
                 return 0.0
+
+        async def payout():
+            """The multiplier the game will really play, from its slider (not the boxes)."""
+            got = await self.query(SEL["thumb"])
+            try:
+                t = float(got[0]["attrs"].get("aria-valuenow"))
+            except (IndexError, TypeError, ValueError):
+                return 0.0
+            real = 100 - t if side == "over" else t
+            return round(99 / real, 2) if real > 0 else 0.0
         if abs(await payout() - want) > 0.02:
             await self._enter_chance(chance, side, want, payout)
         await self.assert_zero_bet()
@@ -120,6 +160,12 @@ class HousebetsDice(HousebetsGame):
         if not m:
             raise SiteError(f"unreadable result {result!r}")
         won, roll = m.group(1) == "Win", float(m.group(2))
+        # The result itself must fit the odds we think we're playing: a win needs a roll past the target.
+        target = 100 - chance if side == "over" else chance
+        if won != (roll > target if side == "over" else roll < target):
+            type(self)._method = None
+            await self.snapshot_page(f"dice result doesn't fit a {chance}% {side} roll: {result!r}")
+            raise SiteError(f"dice isn't playing {chance}% (got {result!r})")
         mult = round(99 / chance, 2)
         broken = 0 if won else self.streak
         self.streak = self.streak + 1 if won else 0

@@ -209,6 +209,21 @@
         dpr: devicePixelRatio, card: r && [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)] } });
       return;
     }
+    if (msg.type === 'key') {
+      // Keyboard on one element (e.g. a slider handle: arrows step it), replying with its state after.
+      const el = find(msg.selector, msg.index || 0, null, scoped(msg));
+      if (!el && !top) return;
+      if (el) {
+        el.focus();
+        const opts = { bubbles: true, composed: true, cancelable: true, key: msg.key, code: msg.key };
+        for (let i = 0; i < (msg.times || 1); i++) {
+          el.dispatchEvent(new KeyboardEvent('keydown', opts));
+          el.dispatchEvent(new KeyboardEvent('keyup', opts));
+        }
+      }
+      send({ type: 'done', id: msg.id, ok: !!el, data: el ? { now: el.getAttribute('aria-valuenow') } : null });
+      return;
+    }
     if (msg.type === 'set') {
       const el = find(msg.selector, msg.index || 0, null, scoped(msg));
       if (!el && !top) return;
