@@ -136,11 +136,18 @@ class HousebetsGame(Game):
                 raise SiteError(f"timed out waiting for {what}")
             await asyncio.sleep(POLL_S)
 
-    async def click_until(self, selector: str, read, check, what: str, first_wait: float = 2.5):
+    async def click_until(self, selector: str, read, check, what: str, first_wait: float = 2.5, busy=None):
         """Click, wait for the page to show the result; if it doesn't, re-read and click again only
-        if the first click really didn't land (a late click must not become a second action)."""
+        if the first click really didn't land (a late click must not become a second action).
+        busy: an async check that's true while the game is still playing out the last click (e.g. its
+        bet button is disabled); no second click goes in until it's false."""
         for attempt in range(3):
             if attempt:
+                if busy:
+                    try:
+                        await self.until(busy, lambda b: not b, f"{what} to finish", timeout=SETTLE_TIMEOUT_S)
+                    except SiteError:
+                        pass
                 p = await read()
                 if check(p):
                     return p
@@ -196,7 +203,12 @@ class HousebetsGame(Game):
             await self.until(bet_ready, lambda b: bool(b), "the bet button", timeout=self.settle_s + 2)
         except SiteError:
             pass                                      # click anyway; click_until reports a real miss
-        new = await self.click_until(bet_selector, fresh, lambda n: bool(n), "the result", first_wait=self.settle_s)
+        async def busy():
+            return not await bet_ready()
+        # A slow result (a jackpot's celebration) used to get a second click: a real extra spin, so
+        # Hubie reacted to the hit a spin late. No re-click while the bet button is still disabled.
+        new = await self.click_until(bet_selector, fresh, lambda n: bool(n), "the result",
+                                     first_wait=self.settle_s, busy=busy)
         return new[0]
 
     settle_s = 2.5          # how long a bet's result takes to show (longer for animated games)

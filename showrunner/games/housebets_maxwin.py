@@ -21,6 +21,7 @@ class HousebetsMaxWin(HousebetsGame):
     max_multiplier = 1000       # Standard mode, the most this game pays
     grind = True          # spin back to back until it hits (the runner's grind mode)
     ready_selector = SEL["mode"]
+    settle_s = 6.0              # a hit plays a celebration before its result shows
     brief = ("Housebets Max Win (real site, zero-value bets): pick a mode and it's all or nothing: "
              "Standard hits 1,000x about 1 in 1,000, Silver 100x 1 in 100, Gold 10x 1 in 10, Diamond 5x "
              "1 in 5. You GRIND it: pick a mode once and spin until it hits; every so often you're told how "

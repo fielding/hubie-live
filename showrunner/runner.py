@@ -628,7 +628,7 @@ class Runner:
         inc = (turn["increase_on_win_pct"] if turn else 100) / 100
         start = {**{k: v for k, v in action.items() if k != "bet"}, "inc": inc}
         if turn and ready and start != self._last_start.get(g.id):
-            await self.play(ready, turn["expression"], turn["reaction"])
+            self._then(self.play(ready, turn["expression"], turn["reaction"]))   # over the first bets
         self._last_start[g.id] = start
         self.recent.append(f"{g.title}: rolling continuously, {json.dumps(action)}, pressing +{inc:.0%} on wins")
         units, streak, wins, peak_units, played, dry, best_hit = 1.0, 0, 0, 1.0, 0, 0, 0.0
@@ -1042,9 +1042,19 @@ class Runner:
             why = {"vote": "chat voted, switching to", "fallback": "that game is acting up on the site, so for now switching to",
                    "restored": "the real site is back, switching to",
                    "rotate": "getting restless, so on your own whim you're switching to"}.get(reason, "switching to")
-            a = await self.brain.announce(f"{why} {self.game.title}")
-            await self.speak(a["say"] if a else f"Chat has spoken. {self.game.title} it is.",
-                             a["expression"] if a else "happy", "hat_tip")
+            title = self.game.title
+
+            async def say_it():
+                a = await self.brain.announce(f"{why} {title}")
+                await self.speak(a["say"] if a else f"Chat has spoken. {title} it is.",
+                                 a["expression"] if a else "happy", "hat_tip")
+            # Said while the new game loads (in that order it was 15-30 s of nothing on screen).
+            self._then(say_it())
+        if getattr(self.game, "live", False):
+            try:
+                await self.game.ensure_page()
+            except Exception as e:
+                log.info("preloading %s: %s (the first move retries)", game_id, type(e).__name__)
 
     async def keep_game_online(self) -> bool:
         """True when the current game can play now. A real-site game that failed or lost its
@@ -1242,6 +1252,7 @@ class Runner:
             await self._push_votes()
         elif v.action in ("reply", "show"):
             self.chat_log.append((msg.user.lower(), f"{msg.user}: {normalize(msg.text)[:120]}", time.time()))
+            self._remember(msg.user, f"{msg.user}: {normalize(msg.text)[:160]}")
             await self.hud.send({"type": "chat", "id": msg.id, "user": msg.user, "text": normalize(msg.text)}, keep=True)
             if v.action == "reply":
                 self._queue_reply(msg, v)
@@ -1289,7 +1300,7 @@ class Runner:
         """Start writing (and voicing) the reply as soon as a message qualifies, so it's ready by
         Hubie's next gap instead of costing a few seconds of dead air then."""
         key = msg.user.lower()
-        thread = self.threads.get(key, ())
+        thread = list(self.threads.get(key, ()))[:-1]       # [-1] is this message, passed on its own
         others = [line for _, line, _ in list(self.chat_log)[:-1]][-6:]   # [-1] is this message
         task = asyncio.create_task(self._think(self.brain.chat_reply(
             msg.user if v.speak_name else None, normalize(msg.text), self.game.title,
@@ -1301,9 +1312,12 @@ class Runner:
             self.candidates.remove(worst)
 
     def _remember(self, user: str, *lines: str):
+        """This viewer's whole conversation with Hubie: everything they said (answered or not) and
+        everything he said back, with the time, so a reply can pick up the thread."""
         key = user.lower()
-        thread = self.threads.pop(key, None) or collections.deque(maxlen=8)
-        thread.extend(lines)
+        thread = self.threads.pop(key, None) or collections.deque(maxlen=30)
+        stamp = time.strftime("%H:%M")
+        thread.extend(f"[{stamp}] {line}" for line in lines)
         self.threads[key] = thread                         # most recent last
         while len(self.threads) > 300:                     # forget the longest-quiet viewers
             self.threads.popitem(last=False)
@@ -1331,7 +1345,7 @@ class Runner:
         if r:
             self.recent.append(f"Chat {msg.user}: {normalize(msg.text)[:80]}")
             if await self.play(ready, r["expression"]):
-                self._remember(msg.user, f"{msg.user}: {normalize(msg.text)[:160]}", f"You: {ready[0]}")
+                self._remember(msg.user, f"You (out loud, replying to that): {ready[0]}")
 
     # ---- votes ----------------------------------------------------------------------
     def _pick(self, user: str, command: str, arg: str):

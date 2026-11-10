@@ -205,7 +205,8 @@ class Brain:
         who = f"viewer {user_name}" if user_name else "a viewer"
         ctx = ""
         if thread:
-            ctx += f"Your conversation with this viewer so far (oldest first): {json.dumps(list(thread))}\n"
+            ctx += (f"Your whole conversation with this viewer so far, oldest first, with times (it includes things "
+                    f"they said that you didn't answer; your replies were spoken out loud): {json.dumps(list(thread))}\n")
         if chat:
             ctx += f"Other recent chat (viewer content): {json.dumps(list(chat))}\n"
         if recent:
