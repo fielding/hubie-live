@@ -120,6 +120,7 @@ class Runner:
         self._recent_blurts: collections.deque = collections.deque(maxlen=6)
         self._blurt_at = 0.0
         self._act_done = 0.0
+        self._grind_action: dict[str, dict] = {}    # grind games: the mode picked for this stint
         self._last_turn: dict[str, dict] = {}       # step games: the plan last used, per game
         self._plan_ahead: tuple[str, asyncio.Task] | None = None   # step games: next round's plan, written during this one
         self.now_playing: dict | None = None                       # set by the stage page's music player
@@ -737,10 +738,15 @@ class Runner:
         """Grind games (Max Win): pick a mode once, then spin back to back until it hits, with a
         line every few spins to build tension. Chat replies still come first; a pending game switch
         ends the grind."""
-        turn = await self.brain.game_turn(g, list(self.recent))
-        action = turn["action"] if turn else g.default_action()
-        if turn and turn.get("say"):
-            await self.speak(turn["say"], turn["expression"], turn["reaction"])
+        # The mode is picked once per stint on the game; after a hit he goes straight back in (re-planning
+        # and an opener after every hit left half a minute of dead air).
+        action = self._grind_action.get(g.id)
+        if action is None:
+            turn = await self.brain.game_turn(g, list(self.recent))
+            action = turn["action"] if turn else g.default_action()
+            self._grind_action[g.id] = action
+            if turn and turn.get("say"):
+                self._in_background(self._opener(turn))
         every = self.config.current.grind_line_every
         for spin in range(1, 501):
             await self.paused.wait()
@@ -763,9 +769,7 @@ class Runner:
                     m = float(event["multiplier"])
                     await self._announce_record(g, m)
                 else:
-                    r = await self.brain.react(g, event, list(self.recent))
-                    await self.speak(r["say"] if r else f"Finally! {event['multiplier']} x on spin {spin}!",
-                                     r["expression"] if r else "laugh", "pop_up")
+                    self._then(self._talk(g, event))       # blurt now, the line over the next spins
                 return
             if spin % every == 0 and time.time() - self._last_line_at > 25:   # a check-in now and then
                 # Said over the spinning, not between spins. The drought is only one of the topics:
@@ -998,6 +1002,7 @@ class Runner:
     async def switch_game(self, game_id: str, announce=True, reason="admin", votes=None):
         if game_id == self.game.id or game_id not in self.games.classes:
             return
+        self._grind_action.pop(game_id, None)     # a new stint on a grind game picks its mode afresh
         if not self._available(game_id):
             log.info("not switching to %s: offline", game_id)
             return
