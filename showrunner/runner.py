@@ -621,14 +621,14 @@ class Runner:
         rolling: back-to-back wins, a big streak breaking, huge single hits, a check-in now and then.
         The session lasts until the game changes (vote or rotation)."""
         cfg = self.config.current
-        turn, ready = await self._think(self.brain.plan_round(g, list(self.recent), "auto"))
+        turn, _ = await self._think(self.brain.plan_round(g, list(self.recent), "auto"), voice=False)
         # A relaxed face while the bets run (the "thinking" pucker held for a whole session looked odd).
         await self._face(random.choice(("neutral", "focused")), force=True)
         action = turn["action"] if turn else g.default_action()
         inc = (turn["increase_on_win_pct"] if turn else 100) / 100
         start = {**{k: v for k, v in action.items() if k != "bet"}, "inc": inc}
-        if turn and ready and start != self._last_start.get(g.id):
-            self._then(self.play(ready, turn["expression"], turn["reaction"]))   # over the first bets
+        if turn and turn.get("say") and start != self._last_start.get(g.id):
+            self._then(self._opener(turn))               # voiced and said over the first bets
         self._last_start[g.id] = start
         self.recent.append(f"{g.title}: rolling continuously, {json.dumps(action)}, pressing +{inc:.0%} on wins")
         units, streak, wins, peak_units, played, dry, best_hit = 1.0, 0, 0, 1.0, 0, 0, 0.0
