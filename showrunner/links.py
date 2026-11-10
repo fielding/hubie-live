@@ -150,6 +150,7 @@ class BridgeLink(Broadcast):
         # installed connects too; it has no game tab, and its errors ("could not open") used to win the
         # race and bench every game. Commands go to the home extension once it's known.
         self.home = None
+        self.stream_bounds: dict | None = None     # screen bounds of the stream popup (for the screen watchdog)
 
     async def handler(self, ws):
         # Any web page can open a socket to localhost; only our extension may drive the site.
@@ -173,6 +174,11 @@ class BridgeLink(Broadcast):
             name = "top" if m.get("top") else f"frame-{abs(hash(m.get('url'))) % 10_000}"
             (self.probe_dir / f"{name}.json").write_text(json.dumps(m, indent=1))
         elif kind in ("status", "loaded", "error"):
+            if kind == "status":
+                for t in m.get("tabs") or []:
+                    w = t.get("window") or {}
+                    if w.get("type") == "popup" and (self.stream_tab is None or t.get("id") == self.stream_tab):
+                        self.stream_bounds = w
             log.info("bridge %s: %s", kind, json.dumps({k: v for k, v in m.items() if k != "type"})[:600])
             # Only the stream tab counts: the extension reports loads from every Housebets tab, and a
             # person browsing the site in another tab isn't the stream reloading.

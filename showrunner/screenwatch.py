@@ -19,24 +19,35 @@ THUMB = (128, 80)
 CHROME_TOP_PX = 140                     # title/tab bar at 2x: not part of the page
 
 
-def window_id() -> int | None:
+def window_id(bounds: dict | None = None) -> int | None:
+    """The stream popup's window. bounds (left/top/width/height from the extension) pick it exactly;
+    without them, the title match is used only if it's unambiguous (any Housebets tab in a normal
+    window has the same title, and watching that one would miss a real freeze or reload for a fake one)."""
     try:
         import Quartz
     except ImportError:
         return None
     wins = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionAll, Quartz.kCGNullWindowID) or []
-    for w in wins:
-        if w.get("kCGWindowOwnerName") == "Google Chrome" and TITLE in str(w.get("kCGWindowName", "")) \
-                and w.get("kCGWindowLayer") == 0:
-            return int(w["kCGWindowNumber"])
+    found = [w for w in wins if w.get("kCGWindowOwnerName") == "Google Chrome" and w.get("kCGWindowLayer") == 0
+             and TITLE in str(w.get("kCGWindowName", ""))]
+    if bounds:
+        for w in found:
+            b = w.get("kCGWindowBounds") or {}
+            if all(abs(b.get(q, -1e9) - bounds.get(k, 1e9)) <= 4
+                   for q, k in (("X", "left"), ("Y", "top"), ("Width", "width"), ("Height", "height"))):
+                return int(w["kCGWindowNumber"])
+    if len(found) == 1:
+        return int(found[0]["kCGWindowNumber"])
+    if found:
+        log.info("screen watch: %d Housebets windows and none matches the stream popup; skipping", len(found))
     return None
 
 
-def snapshot() -> tuple[float, bytes] | None:
+def snapshot(bounds: dict | None = None) -> tuple[float, bytes] | None:
     """(average brightness 0-255, tiny grayscale thumbnail) of the game page as captured, or None
     if it can't be measured. Comparing thumbnails over time catches a frozen window: when Chrome
     stops painting it, OBS shows black while the window's last frame stays readable here."""
-    wid, ffmpeg = window_id(), shutil.which("ffmpeg")
+    wid, ffmpeg = window_id(bounds), shutil.which("ffmpeg")
     if wid is None or not ffmpeg:
         return None
     with tempfile.TemporaryDirectory() as tmp:

@@ -110,7 +110,7 @@ tension = ["Okay, okay, okay, easy now.", "Steady, sloth. Steady.", "Oh, this is
            "Ooh, my palms are sweaty.", "Right then, nerves of steel.", "Oh, I don't like how good this feels."]
 bust = ["Oh, you're kidding me.", "Oh no. Oh no no no.", "Ah, come on, man!", "Oof. Right in the hat.",
         "Oh, that's just rude.", "You have got to be joking.", "Ah, brutal. Absolutely brutal.",
-        "Oh, I felt that one.", "Well, that's just unkind.", "Oh, son of a sloth."]
+        "Oh, I felt that one.", "Well, that's just unkind.", "Oh, that one stung."]
 
 # Catchphrases: fixed lines Hubie sometimes says instead of a written reaction when a round
 # ends this way (instant, since the voice is cached). chance = how often (0-1).

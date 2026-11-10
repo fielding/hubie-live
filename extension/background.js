@@ -140,7 +140,11 @@ async function report() {
         alive = 'injected';
       } catch (e) { alive += ' | inject failed: ' + String(e.message || e).slice(0, 120); }
     }
-    tabs.push({ id: t.id, url: t.url, title: t.title, status: t.status, alive });
+    // The window's screen bounds let the show's frozen-screen watchdog capture exactly this window
+    // (by title alone it could grab another Housebets tab).
+    let win = null;
+    try { const w = await chrome.windows.get(t.windowId); win = { type: w.type, left: w.left, top: w.top, width: w.width, height: w.height }; } catch (e) {}
+    tabs.push({ id: t.id, url: t.url, title: t.title, status: t.status, alive, window: win });
   }
   ws.send(JSON.stringify({ type: 'status', tabs, total_tabs: all.length }));
 }

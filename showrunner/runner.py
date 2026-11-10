@@ -39,7 +39,7 @@ PAGE_REFRESH_S = 3 * 3600
 CHECK_IN_ANGLES = ("how this session is going, in one vivid image", "something a chatter said earlier",
                    "chasing the stream record", "a small detail of life on the couch (the snacks, the cat, the remote)",
                    "the music that's playing", "this game itself and why you like or hate it",
-                   "a ridiculous superstition you're trying right now", "what you'd buy with the record if it were real",
+                   "a ridiculous superstition you're trying right now", "something absurd you'd buy for Reginald or the couch",
                    "a fake sponsor you'd love to have", "your rival (an imaginary rich sloth named Reginald)",
                    "what your top hat has seen", "a dramatic movie-trailer voice description of this session",
                    "a one-line life lesson that is clearly terrible advice (about anything but gambling, money or risk)",
@@ -80,7 +80,7 @@ def _either(*events: asyncio.Event) -> asyncio.Event:
     return Either()
 
 
-BLURT_GAP_S = 20               # least time between instant interjections
+BLURT_GAP_S = 45               # least time between instant interjections
 CLIP_MIN_X = 500               # hits this big get auto-clipped (a game can raise its own bar: clip_x)
 CLIP_HYPE = ("this moment just got clipped for the highlight reel: hype it up, tell chat to share the clip, "
              "act like a streamer who knows this one's going viral")
@@ -343,7 +343,9 @@ class Runner:
         t0 = time.time()
         out = await coro
         t1 = time.time()
-        ready = await self.prepare(out["say"]) if voice and out and out.get("say") else None
+        ready = None
+        if voice and out and out.get("say"):
+            ready = await self.prepare(out["say"]) or False   # False: tried and refused, don't voice it again
         log.info("timing: line written in %.1fs, voiced in %.1fs%s", t1 - t0, time.time() - t1,
                  " (ahead)" if speculative else "")
         return out, ready
@@ -1451,7 +1453,7 @@ class Runner:
                     black = still = 0
                     last = None
                     continue
-            snap = await asyncio.to_thread(screenwatch.snapshot)
+            snap = await asyncio.to_thread(screenwatch.snapshot, getattr(bridge, "stream_bounds", None))
             if snap is None:
                 continue
             level, thumb = snap
