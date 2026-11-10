@@ -80,6 +80,7 @@ def _either(*events: asyncio.Event) -> asyncio.Event:
     return Either()
 
 
+PICK_HOLD_S = 180              # a chat pick (!mines 20) holds this long, or until the next pick
 BLURT_GAP_S = 45               # least time between instant interjections
 CLIP_MIN_X = 500               # hits this big get auto-clipped (a game can raise its own bar: clip_x)
 CLIP_HYPE = ("this moment just got clipped for the highlight reel: hype it up, tell chat to share the clip, "
@@ -121,7 +122,8 @@ class Runner:
         self._blurt_at = 0.0
         self._act_done = 0.0
         self._grind_action: dict[str, dict] = {}
-        self._tease_at = 0.0       # game id -> when he last left it (rotation fairness)    # grind games: the mode picked for this stint
+        self._tease_at = 0.0
+        self._sticky_pick: dict[str, tuple[dict, float]] = {}   # game -> (chat's pick, until when)       # game id -> when he last left it (rotation fairness)    # grind games: the mode picked for this stint
         self._last_turn: dict[str, dict] = {}       # step games: the plan last used, per game
         self._plan_ahead: tuple[str, asyncio.Task] | None = None   # step games: next round's plan, written during this one
         self.now_playing: dict | None = None                       # set by the stage page's music player
@@ -372,6 +374,7 @@ class Runner:
             said = await asyncio.gather(unless, return_exceptions=True)
             if said[0] is True:
                 return False
+        log.info("talk: %s on %s", json.dumps({k: event.get(k) for k in ("kind", "multiplier", "hits_of", "streak") if k in event}), g.id)
         blurt = None if pre and pre.done() else self._pick_blurt(self._blurt_kind(event))
         if pre is None:
             pre = asyncio.create_task(self._think(self.brain.react(
@@ -489,8 +492,14 @@ class Runner:
         tfx = getattr(g, "talk_from_x", cfg.talk_from_x)   # a game where 5x is routine (HiLo) sets its own
         target, peak = tfx, 1.0
         if not g.in_round() and self.picks.get(g.id):
-            self._apply_picks(g)                       # chat's "!mines 10" for this round
+            self._apply_picks(g)                       # chat's "!mines 10"
             self._plan_ahead = None                    # planned before chat picked
+        elif not g.in_round() and g.id in self._sticky_pick:
+            pick, until = self._sticky_pick[g.id]
+            if time.time() < until:
+                g.chat_pick = dict(pick)               # still chat's call
+            else:
+                del self._sticky_pick[g.id]
         if not g.in_round():
             # The plan for this round was written during the last one, so a round starts right away.
             # Words only: the opener is voiced (in the background) only when it's actually said.
@@ -505,6 +514,8 @@ class Runner:
                     turn, _ = await self._think(self.brain.plan_round(g, list(self.recent), "steps"), voice=False)
                 self._plan_ahead = (g.id, asyncio.create_task(self._think(
                     self.brain.plan_round(g, list(self.recent), "steps"), speculative=True, voice=False)))
+            if turn and getattr(g, "chat_pick", None):
+                turn = {**turn, "action": {**turn["action"], **g.chat_pick}}   # chat's number beats the plan
             if turn:
                 self._last_turn[g.id] = turn
             await self._face(random.choice(("focused", "neutral")), force=True)
@@ -515,7 +526,9 @@ class Runner:
                 if turn.get("say") and start != self._last_start.get(g.id):
                     self._in_background(self._opener(turn))
                 self._last_start[g.id] = start
-            ev = await self._act(g, turn["action"] if turn else g.default_action())
+            start_action = turn["action"] if turn else g.default_action()
+            log.info("round: %s %s", g.id, json.dumps({k: v for k, v in start_action.items() if k != "type"}))
+            ev = await self._act(g, start_action)
             self.recent.append(f"{g.title}: {json.dumps(ev)} (cash out at {target:g}x)")
             await self.push_game_state(ev)
         next_talk, run_talk = tfx, None
@@ -1342,6 +1355,12 @@ class Runner:
             counts.setdefault(value, []).append(at)
         value = max(counts, key=lambda v: (len(counts[v]), max(counts[v])))
         g.chat_pick = {spec[0]: value}
+        # A pick holds for a few minutes (one round was gone in a click at 20 mines, so it looked
+        # ignored), and it's always announced by name, queued so it can't be dropped.
+        who = [u for u, (v, _) in picks.items() if v == value]
+        self._sticky_pick[g.id] = (g.chat_pick, time.time() + PICK_HOLD_S)
+        names = who[0] if len(who) == 1 else f"{len(who)} of you"
+        self._then(self.speak(f"{value} {spec[0]}, {names}'s call. Let's go.", "happy", "lean_in"))   # names: safety-checked
         self.recent.append(f"Chat picked {value} {spec[0]} for this round ({len(counts[value])} requests). "
                            f"Call it out and play it.")
         log.info("chat pick: %s=%s %s", spec[0], value, {v: len(a) for v, a in counts.items()})
