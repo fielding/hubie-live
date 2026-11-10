@@ -121,7 +121,6 @@ class Runner:
         self._blurt_at = 0.0
         self._act_done = 0.0
         self._grind_action: dict[str, dict] = {}
-        self._played_at: dict[str, float] = {}
         self._tease_at = 0.0       # game id -> when he last left it (rotation fairness)    # grind games: the mode picked for this stint
         self._last_turn: dict[str, dict] = {}       # step games: the plan last used, per game
         self._plan_ahead: tuple[str, asyncio.Task] | None = None   # step games: next round's plan, written during this one
@@ -1011,8 +1010,8 @@ class Runner:
     async def switch_game(self, game_id: str, announce=True, reason="admin", votes=None):
         if game_id == self.game.id or game_id not in self.games.classes:
             return
-        self._grind_action.pop(game_id, None)
-        self._played_at[self.game.id] = time.time()     # a new stint on a grind game picks its mode afresh
+        self._grind_action.pop(game_id, None)            # a new stint on a grind game picks its mode afresh
+        self.st.setdefault("played_at", {})[self.game.id] = time.time()   # rotation fairness, kept across restarts
         if not self._available(game_id):
             log.info("not switching to %s: offline", game_id)
             return
@@ -1408,7 +1407,8 @@ class Runner:
                   if gid != self.game.id and getattr(cls, "live", False) and cls.command and self._available(gid)]
         if others:
             # The least recently played few, so every game comes around (pure random left some out for hours).
-            others.sort(key=lambda gid: self._played_at.get(gid, 0))
+            played = self.st.get("played_at", {})
+            others.sort(key=lambda gid: (played.get(gid, 0), random.random()))
             alt = random.choice(others[:3])
             log.info("rotating games: %s -> %s", self.game.id, alt)
             await self.switch_game(alt, reason="rotate")
