@@ -1347,8 +1347,13 @@ class Runner:
         if gid not in self._pick_open:
             self._pick_open[gid] = time.time()
             if self.game.id == gid:
-                self._then(self.speak(f"{spec[0].capitalize()} vote! Type bang {spec[0]} and a number. "
-                                      f"{PICK_WINDOW_S} seconds.", "happy", "lean_in", checked=True))
+                self._pick_open[gid] = float("inf")     # the clock starts when he announces it (may queue)
+
+                async def announce():
+                    self._pick_open[gid] = time.time()
+                    await self.speak(f"{spec[0].capitalize()} vote! Type bang {spec[0]} and a number. "
+                                     f"{PICK_WINDOW_S} seconds.", "happy", "lean_in", checked=True)
+                self._then(announce())
         if self.game.id == gid and self._next_round:     # the planned next round didn't know this yet
             self._next_round.cancel()
             self._next_round = None
