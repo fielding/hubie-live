@@ -1,9 +1,12 @@
 """Housebets Dice on the real site (extension/), $0 bets only. Selectors learned from page
 snapshots on 2026-11-07: the result appears as a history chip "Win|Loss, rolled 72.10"."""
 import asyncio
+import logging
 import re
 
 from .housebets import HousebetsGame, SiteError
+
+log = logging.getLogger("housebets")
 
 SEL = {
     "bet": ".hd-p-betbtn",                       # first match is the Manual tab's Bet
@@ -12,6 +15,7 @@ SEL = {
     "mult": 'input[aria-labelledby="hd-g-lbl-mult"]',
     "mode": 'button[data-mode="{side}"]',
     "chips": ".hd-g-chip",
+    "slider": 'input[type="range"]',
 }
 # Win chance %. Fielding's call (2026-11-08): dice is played at 6x (99/6 = 16.5%), which makes
 # streaks rare enough to be exciting under the auto-session ladder.
@@ -23,9 +27,11 @@ class HousebetsDice(HousebetsGame):
     id = "dice"
     slug = "dice"
     title = "HOUSEBETS DICE"
-    # Off the menu 2026-11-08 20:30: after a fresh page load the game stopped taking the typed win
-    # chance (payout never left 2x, even with retries). Debug off-stream, then restore "!dice".
-    command = ""
+    # 2026-11-08: after a site update the game stopped taking the typed win chance (payout stuck at
+    # 2x). It can't be debugged off-stream (Cloudflare blocks fresh browsers), so Dice tries several
+    # ways in, keeps the one the payout readout confirms, and snapshots the page if none works.
+    command = "!dice"
+    _method: str | None = None    # the input method that worked last (class-wide: survives new instances)
     max_multiplier = 9.9        # his lowest win chance is 10% -> 9.9x
     ready_selector = SEL["chance"]
     brief = ("Housebets Dice (real site, zero-value bets): pick a win chance and roll over or under. Lower "
@@ -56,6 +62,34 @@ class HousebetsDice(HousebetsGame):
         return {"game": self.id, "site": "housebets", "fair": None, "balance": 0, "last": self.round,
                 "win_streak": self.streak, "best_streak_this_session": self.best_streak}
 
+    async def _enter_chance(self, chance: float, side: str, want: float, payout):
+        """Get the game to take the win chance, trying each way in until its payout readout agrees."""
+        slider = {"over": 100 - chance, "under": chance}[side]
+        methods = {
+            "chance box": lambda: self.set_value(SEL["chance"], chance),
+            "payout box": lambda: self.set_value(SEL["mult"], f"{want:g}"),
+            "chance box, typed": lambda: self.set_value(SEL["chance"], chance, typed=True),
+            "payout box, typed": lambda: self.set_value(SEL["mult"], f"{want:g}", typed=True),
+            "slider": lambda: self.set_value(SEL["slider"], f"{slider:g}"),
+        }
+        order = ([type(self)._method] if type(self)._method in methods else []) + \
+            [m for m in methods if m != type(self)._method]
+        # Right after a page load the game ignores the first input or two: a second pass retries all.
+        for rnd in range(2):
+            for name in order:
+                try:
+                    await methods[name]()
+                    await self.until(payout, lambda m: abs(m - want) <= 0.02, f"the {want:g}x payout", timeout=2)
+                except SiteError:
+                    continue
+                if type(self)._method != name:
+                    log.info("dice: the win chance took via the %s", name)
+                type(self)._method = name
+                return
+            await asyncio.sleep(1.0)
+        await self.snapshot_page(f"dice ignored every way of setting a {chance}% win chance (payout {await payout()})")
+        raise SiteError(f"dice won't take a {chance}% win chance")
+
     async def _chips(self) -> list[str]:
         return [c["attrs"].get("aria-label", "") for c in await self.query(SEL["chips"])]
 
@@ -77,19 +111,8 @@ class HousebetsDice(HousebetsGame):
                 return float(got[0]["value"]) if got else 0.0
             except (TypeError, ValueError):
                 return 0.0
-        # Right after the page loads, the game ignores the first input or two (its controls aren't
-        # wired yet): set it again until the payout shows it took.
-        for attempt in range(4):
-            if abs(await payout() - want) <= 0.02:
-                break
-            await self.set_value(SEL["chance"], chance)
-            try:
-                await self.until(payout, lambda m: abs(m - want) <= 0.02, f"the {want:g}x payout", timeout=2)
-                break
-            except SiteError:
-                if attempt == 3:
-                    raise
-                await asyncio.sleep(1.0)
+        if abs(await payout() - want) > 0.02:
+            await self._enter_chance(chance, side, want, payout)
         await self.assert_zero_bet()
         chip = await self.bet_and_read(SEL["bet"], SEL["chips"])
         result = chip["attrs"].get("aria-label", "")

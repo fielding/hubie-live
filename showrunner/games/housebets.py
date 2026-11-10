@@ -77,10 +77,20 @@ class HousebetsGame(Game):
             await asyncio.sleep(0.5)
         raise SiteError(f"could not click {selector}" + (f" ({text})" if text else ""))
 
-    async def set_value(self, selector: str, value):
-        r = await self.bridge.request({"type": "set", "scope": "game", "selector": selector, "value": str(value)})
+    async def set_value(self, selector: str, value, typed: bool = False):
+        r = await self.bridge.request({"type": "set", "scope": "game", "selector": selector, "value": str(value),
+                                       "typed": typed})
         if not r or not r.get("ok"):
             raise SiteError(f"could not set {selector}")
+
+    async def snapshot_page(self, why: str):
+        """Save the page as the extension sees it (showrunner/.probe/top.json) for working out a site
+        change after the fact, without anyone touching the stream."""
+        log.warning("saving a page snapshot: %s", why)
+        try:
+            await self.bridge.command({"type": "probe"})
+        except Exception:
+            pass
 
     async def ensure_page(self):
         """Make sure the stream tab shows this game, ready to play (navigating there if not)."""

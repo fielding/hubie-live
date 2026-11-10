@@ -120,7 +120,9 @@ class Runner:
         self._recent_blurts: collections.deque = collections.deque(maxlen=6)
         self._blurt_at = 0.0
         self._act_done = 0.0
-        self._grind_action: dict[str, dict] = {}    # grind games: the mode picked for this stint
+        self._grind_action: dict[str, dict] = {}
+        self._played_at: dict[str, float] = {}
+        self._tease_at = 0.0       # game id -> when he last left it (rotation fairness)    # grind games: the mode picked for this stint
         self._last_turn: dict[str, dict] = {}       # step games: the plan last used, per game
         self._plan_ahead: tuple[str, asyncio.Task] | None = None   # step games: next round's plan, written during this one
         self.now_playing: dict | None = None                       # set by the stage page's music player
@@ -485,7 +487,8 @@ class Runner:
 
     async def _fast_steps(self, g):
         cfg = self.config.current
-        target, peak = cfg.talk_from_x, 1.0
+        tfx = getattr(g, "talk_from_x", cfg.talk_from_x)   # a game where 5x is routine (HiLo) sets its own
+        target, peak = tfx, 1.0
         if not g.in_round() and self.picks.get(g.id):
             self._apply_picks(g)                       # chat's "!mines 10" for this round
             self._plan_ahead = None                    # planned before chat picked
@@ -516,14 +519,14 @@ class Runner:
             ev = await self._act(g, turn["action"] if turn else g.default_action())
             self.recent.append(f"{g.title}: {json.dumps(ev)} (cash out at {target:g}x)")
             await self.push_game_state(ev)
-        next_talk, run_talk = cfg.talk_from_x, None
+        next_talk, run_talk = tfx, None
         stale = asyncio.Event()                        # set when the round ends: run lines still being written are dropped
         try:
-            return await self._climb(g, cfg, target, peak, next_talk, run_talk, stale)
+            return await self._climb(g, cfg, target, peak, next_talk, run_talk, stale, tfx)
         finally:
             stale.set()                                # also on a site error: no lines about a dead round
 
-    async def _climb(self, g, cfg, target, peak, next_talk, run_talk, stale):
+    async def _climb(self, g, cfg, target, peak, next_talk, run_talk, stale, tfx):
         for _ in range(60):
             await self.paused.wait()
             self._business()
@@ -534,7 +537,7 @@ class Runner:
             await self.push_game_state(ev)
             if ev["kind"] == "safe":
                 peak = max(peak, float(ev.get("multiplier") or peak))
-                await self._face("happy" if peak < cfg.talk_from_x else random.choice(("happy", "focused", "smug")))
+                await self._face("happy" if peak < tfx else random.choice(("happy", "focused", "smug")))
                 if peak >= next_talk:                   # a run worth talking about: 5x, 10x, 20x...
                     next_talk = peak * 2
                     self.recent.append(f"{g.title}: {json.dumps(ev)}")
@@ -561,12 +564,12 @@ class Runner:
             # One line per round: a bust right after his run line got said just gets a face (unless the
             # run was huge); a cash-out (the payoff) always gets its line once it's big.
             if ev["kind"] != "bust":
-                return await self._fast_result(g, ev, big=float(ev.get("multiplier") or 0) >= cfg.talk_from_x)
+                return await self._fast_result(g, ev, big=float(ev.get("multiplier") or 0) >= tfx)
             # On a hot board a bust just past the line (8x on 16 mines) happens every round, and a line
             # on each one became "8x and I got greedy" on repeat: a bust needs a real run (or quiet air).
             quiet = cfg.max_quiet_seconds and time.time() - self._last_line_at > cfg.max_quiet_seconds
-            return await self._fast_result(g, ev, big=peak >= cfg.talk_from_x * 2 or (peak >= cfg.talk_from_x and quiet),
-                                           unless=None if peak >= cfg.talk_from_x * 4 else run_talk)
+            return await self._fast_result(g, ev, big=peak >= tfx * 2 or (peak >= tfx and quiet),
+                                           unless=None if peak >= tfx * 4 else run_talk)
 
     async def _fast_result(self, g, ev: dict, big: bool, unless: asyncio.Task | None = None):
         record = self._record(ev)
@@ -680,7 +683,11 @@ class Runner:
                     await self._announce_record(g, m)
                 elif clipped:                               # a monster hit: always worth the moment
                     await self._talk(g, {**ev, "clip": CLIP_HYPE})
-                elif won and streak >= 2 and getattr(g, "streak_talk", True) and p_win ** streak <= 0.1:
+                elif won and streak >= 2 and getattr(g, "streak_talk", True) and p_win ** streak <= 0.1 and \
+                        (p_win ** streak <= 0.005 or time.time() - self._tease_at > 120):
+                    # A tease (4 flips in a row) comes often: one every couple of minutes. Real runs always talk.
+                    if p_win ** streak > 0.005:
+                        self._tease_at = time.time()
                     pre, ahead = (ahead[1], None) if ahead and ahead[0] == streak else (None, ahead)
                     self._in_background(self._talk(g, streak_event(streak, m, units), pre=pre))
                 elif m >= getattr(g, "big_hit_x", max(20.0, cfg.talk_from_x * 4)):    # a huge single hit
@@ -1004,7 +1011,8 @@ class Runner:
     async def switch_game(self, game_id: str, announce=True, reason="admin", votes=None):
         if game_id == self.game.id or game_id not in self.games.classes:
             return
-        self._grind_action.pop(game_id, None)     # a new stint on a grind game picks its mode afresh
+        self._grind_action.pop(game_id, None)
+        self._played_at[self.game.id] = time.time()     # a new stint on a grind game picks its mode afresh
         if not self._available(game_id):
             log.info("not switching to %s: offline", game_id)
             return
@@ -1399,7 +1407,9 @@ class Runner:
         others = [gid for gid, cls in self.games.classes.items()
                   if gid != self.game.id and getattr(cls, "live", False) and cls.command and self._available(gid)]
         if others:
-            alt = random.choice(others)
+            # The least recently played few, so every game comes around (pure random left some out for hours).
+            others.sort(key=lambda gid: self._played_at.get(gid, 0))
+            alt = random.choice(others[:3])
             log.info("rotating games: %s -> %s", self.game.id, alt)
             await self.switch_game(alt, reason="rotate")
         else:

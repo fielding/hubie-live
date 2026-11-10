@@ -220,8 +220,25 @@
         el.focus();
         const proto = Object.getPrototypeOf(el);
         const setter = Object.getOwnPropertyDescriptor(proto, 'value');
-        if (setter && setter.set) setter.set.call(el, String(msg.value)); else el.value = String(msg.value);
-        el.dispatchEvent(new Event('input', opts));
+        const put = (v) => { if (setter && setter.set) setter.set.call(el, v); else el.value = v; };
+        if (msg.typed) {
+          // Like a person typing: clear, then one character at a time with the key and InputEvents a
+          // real keystroke makes (some inputs only commit what arrives as insertText).
+          el.select && el.select();
+          put('');
+          el.dispatchEvent(new InputEvent('input', { ...opts, inputType: 'deleteContentBackward' }));
+          let cur = '';
+          for (const ch of String(msg.value)) {
+            el.dispatchEvent(new KeyboardEvent('keydown', { ...opts, key: ch }));
+            el.dispatchEvent(new InputEvent('beforeinput', { ...opts, inputType: 'insertText', data: ch, cancelable: true }));
+            cur += ch; put(cur);
+            el.dispatchEvent(new InputEvent('input', { ...opts, inputType: 'insertText', data: ch }));
+            el.dispatchEvent(new KeyboardEvent('keyup', { ...opts, key: ch }));
+          }
+        } else {
+          put(String(msg.value));
+          el.dispatchEvent(new Event('input', opts));
+        }
         el.dispatchEvent(new Event('change', opts));
         for (const type of ['keydown', 'keypress', 'keyup']) {
           el.dispatchEvent(new KeyboardEvent(type, { ...opts, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }));

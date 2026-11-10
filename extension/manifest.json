@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Hubie Housebets Bridge",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Lets the local Hubie show runner see and press the Housebets game it plays on stream.",
   "background": {
     "service_worker": "background.js"

@@ -186,13 +186,15 @@ After changing scene or HUD files, select the browser source and click **Refresh
 
 | Chat | Does |
 |---|---|
-| `!tower` `!road` `!plinko` `!limbo` `!flip` `!wheel` `!hilo` `!maxwin` `!mines` | vote for the next game (60 s poll) |
+| `!tower` `!road` `!plinko` `!limbo` `!flip` `!wheel` `!hilo` `!maxwin` `!mines` `!dice` `!keno` | vote for the next game (60 s poll) |
 | `!mines 1-24` | pick the next Mines round's mine count |
 | `!song` / `!track`, `!next`, `!skip` | current track (NCS credit), up next, vote to skip |
 | `!commands`, `!record`, `!uptime`, `!rules` | the basics |
 | say "Hubie" | he answers |
 
-Dice and Keno are off the vote menu for now: Housebets changed how their pages take input mid-contest, and they're being reworked.
+When Housebets changed how Dice takes input mid-contest, a fresh browser couldn't get past Cloudflare to
+debug it, so Dice now tries several ways of setting the win chance and keeps the one the page's own payout
+readout confirms. A game that still fails saves a page snapshot and is benched for a few minutes.
 
 ## Configuration
 

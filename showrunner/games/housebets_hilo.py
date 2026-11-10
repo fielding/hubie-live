@@ -21,6 +21,7 @@ class HousebetsHiLo(HousebetsGame):
     slug = "hilo"
     title = "HOUSEBETS HILO"
     command = "!hilo"
+    talk_from_x = 10            # 5x is routine on HiLo (a couple of good calls): lines start at 10x
     max_multiplier = None       # a run multiplies without a cap
     ready_selector = SEL["main"]
     brief = ("Housebets HiLo (real site, zero-value bets): a card is showing; guess if the next card is "

@@ -25,9 +25,9 @@ class HousebetsKeno(HousebetsGame):
     id = "keno"
     slug = "keno"
     title = "HOUSEBETS KENO"
-    # Off the menu 2026-11-08 16:31: on stream the Keno page reloaded itself several times in a few
-    # seconds and bets failed; debug off-stream (see the "keno bet failed" log line), then restore "!keno".
-    command = ""
+    # Off the menu 2026-11-08 to 11-09 after a burst of site self-reloads broke its bets. Page-reload
+    # recovery has since been added; a failure now saves a page snapshot for diagnosis.
+    command = "!keno"
     max_multiplier = 1000       # 10 of 10 hits (approx.)
     settle_s = 6.0              # the result shows only after the animation finishes
     streak_talk = False         # what matters is how many of his numbers hit, not wins in a row
@@ -104,6 +104,7 @@ class HousebetsKeno(HousebetsGame):
                         len(await self._pressed()), count,
                         "disabled" if bet and bet[0].get("disabled") else "enabled" if bet else "missing",
                         (await self.bridge.request({"type": "status"}) or {}).get("result") and "up" or "?")
+            await self.snapshot_page("keno bet failed")
             raise
         result = chip["text"]
         m = re.match(r"([\d,]+(?:\.\d+)?)", result)
