@@ -80,6 +80,7 @@ def _either(*events: asyncio.Event) -> asyncio.Event:
     return Either()
 
 
+PICK_WINDOW_S = 20             # a chat pick vote (!mines N) stays open this long
 PICK_HOLD_S = 180              # a chat pick (!mines 20) holds this long, or until the next pick
 BLURT_GAP_S = 45               # least time between instant interjections
 CLIP_MIN_X = 500               # hits this big get auto-clipped (a game can raise its own bar: clip_x)
@@ -121,9 +122,10 @@ class Runner:
         self._recent_blurts: collections.deque = collections.deque(maxlen=6)
         self._blurt_at = 0.0
         self._act_done = 0.0
-        self._grind_action: dict[str, dict] = {}
+        self._grind_action: dict[str, dict] = {}    # grind games: the mode picked for this stint
         self._tease_at = 0.0
-        self._sticky_pick: dict[str, tuple[dict, float]] = {}   # game -> (chat's pick, until when)       # game id -> when he last left it (rotation fairness)    # grind games: the mode picked for this stint
+        self._sticky_pick: dict[str, tuple[dict, float]] = {}   # game -> (chat's pick, until when)
+        self._pick_open: dict[str, float] = {}      # game -> when its chat-pick vote opened
         self._last_turn: dict[str, dict] = {}       # step games: the plan last used, per game
         self._plan_ahead: tuple[str, asyncio.Task] | None = None   # step games: next round's plan, written during this one
         self.now_playing: dict | None = None                       # set by the stage page's music player
@@ -491,7 +493,7 @@ class Runner:
         cfg = self.config.current
         tfx = getattr(g, "talk_from_x", cfg.talk_from_x)   # a game where 5x is routine (HiLo) sets its own
         target, peak = tfx, 1.0
-        if not g.in_round() and self.picks.get(g.id):
+        if not g.in_round() and self._picks_ready(g.id):
             self._apply_picks(g)                       # chat's "!mines 10"
             self._plan_ahead = None                    # planned before chat picked
         elif not g.in_round() and g.id in self._sticky_pick:
@@ -820,7 +822,7 @@ class Runner:
             g.balance = START_BALANCE
             await self.speak("Demo bank refilled. The sloth economy is very forgiving.", "happy")
         await self.puppet.expression("thinking")
-        if not g.in_round() and self.picks.get(g.id):
+        if not g.in_round() and self._picks_ready(g.id):
             self._apply_picks(g)
             if self._next_round:
                 self._next_round.cancel()
@@ -1339,14 +1341,26 @@ class Runner:
         spec = getattr(self.games.classes.get(gid), "chat_setting", None) if gid else None
         if not spec or not arg.isdigit() or not spec[2] <= int(arg) <= spec[3]:
             return
-        self.picks.setdefault(gid, {})[user] = (int(arg), time.time())
+        self.picks.setdefault(gid, {})[user] = (int(arg), time.time())   # one vote per viewer: their latest
+        # The first request opens a short vote instead of winning outright (a Mines round can be over in
+        # two seconds, so "whatever came in since the last round" was just whoever typed last).
+        if gid not in self._pick_open:
+            self._pick_open[gid] = time.time()
+            if self.game.id == gid:
+                self._then(self.speak(f"{spec[0].capitalize()} vote! Type bang {spec[0]} and a number. "
+                                      f"{PICK_WINDOW_S} seconds.", "happy", "lean_in", checked=True))
         if self.game.id == gid and self._next_round:     # the planned next round didn't know this yet
             self._next_round.cancel()
             self._next_round = None
 
+    def _picks_ready(self, gid: str) -> bool:
+        opened = self._pick_open.get(gid)
+        return bool(self.picks.get(gid)) and opened is not None and time.time() - opened >= PICK_WINDOW_S
+
     def _apply_picks(self, g):
         """At a round's start: the most-requested value wins (ties: the latest request)."""
         picks = self.picks.pop(g.id, None)
+        self._pick_open.pop(g.id, None)
         spec = getattr(g, "chat_setting", None)
         if not picks or not spec:
             return
@@ -1359,8 +1373,11 @@ class Runner:
         # ignored), and it's always announced by name, queued so it can't be dropped.
         who = [u for u, (v, _) in picks.items() if v == value]
         self._sticky_pick[g.id] = (g.chat_pick, time.time() + PICK_HOLD_S)
-        names = who[0] if len(who) == 1 else f"{len(who)} of you"
-        self._then(self.speak(f"{value} {spec[0]}, {names}'s call. Let's go.", "happy", "lean_in"))   # names: safety-checked
+        if len(who) == 1:
+            line = f"{value} {spec[0]}, {who[0]}'s call. Let's go."   # names: safety-checked (not checked=True)
+        else:
+            line = f"Chat has spoken: {value} {spec[0]}, {len(who)} votes. Let's go."
+        self._then(self.speak(line, "happy", "lean_in"))
         self.recent.append(f"Chat picked {value} {spec[0]} for this round ({len(counts[value])} requests). "
                            f"Call it out and play it.")
         log.info("chat pick: %s=%s %s", spec[0], value, {v: len(a) for v, a in counts.items()})
