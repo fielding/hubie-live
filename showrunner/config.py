@@ -101,7 +101,7 @@ def _ad_break(ab) -> dict | None:
         if not isinstance(v, list) or not v or not all(isinstance(x, str) and 0 < len(x) <= 160 for x in v):
             raise ValueError(f"ad_break.{key}: needs a list of short lines")
         lines[key] = tuple(v)
-    return {"every_minutes": _num(ab, "every_minutes", 5, 1440, 60), "folder": folder, **lines}
+    return {"every_minutes": _num(ab, "every_minutes", 1, 1440, 60), "folder": folder, **lines}
 
 
 def parse(raw: dict) -> Config:
@@ -193,9 +193,24 @@ def parse(raw: dict) -> Config:
 class LiveConfig:
     def __init__(self, path: Path = PATH):
         self.path = path
-        self._mtime = None
-        self.current: Config = parse(tomllib.loads(path.read_text()))   # must be valid at startup
+        self.good = path.with_name(".config.last-good.toml")   # gitignored
         self._mtime = path.stat().st_mtime
+        # A bad edit must not take the stream down: start on the last config that worked (a 1-minute ad
+        # interval once crash-looped the runner for 3 minutes). Only a first run with no good copy fails.
+        try:
+            self.current: Config = parse(tomllib.loads(path.read_text()))
+            self._keep_good()
+        except Exception as e:
+            if not self.good.exists():
+                raise
+            log.error("config.toml is invalid (%s); starting on the last good config", e)
+            self.current = parse(tomllib.loads(self.good.read_text()))
+
+    def _keep_good(self):
+        try:
+            self.good.write_text(self.path.read_text())
+        except OSError:
+            pass
 
     def maybe_reload(self) -> bool:
         """Re-read the file if it changed. Returns True when a new config was applied."""
@@ -211,6 +226,7 @@ class LiveConfig:
         except Exception as e:
             log.error("config.toml rejected, keeping the previous config: %s", e)
             return False
+        self._keep_good()
         log.info("config.toml reloaded: game=%s chat=%s, %d commands, %d segments",
                  self.current.game_models[0], self.current.chat_models[0], len(self.current.commands),
                  len(self.current.segments))

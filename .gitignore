@@ -24,3 +24,4 @@ assets/desk/edits/probe/
 showrunner/.viewers.json
 assets/ads/*
 !assets/ads/README.md
+showrunner/.config.last-good.toml

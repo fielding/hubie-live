@@ -578,7 +578,9 @@ class Runner:
         if not videos:
             return
         name = BAG.draw(videos)
-        secs = await asyncio.to_thread(clipper_mod.video_seconds, folder / name)
+        level = await asyncio.to_thread(clipper_mod.leveled, folder / name)   # made once, then reused
+        play = f"leveled/{level.name}" if level else name
+        secs = await asyncio.to_thread(clipper_mod.video_seconds, folder / play)
         if not secs:
             log.warning("ad break: couldn't read %s; skipped", name)
             return
@@ -588,7 +590,7 @@ class Runner:
         try:
             await self.speak(BAG.draw(ab["intro"]), "happy", "hat_tip", checked=True)
             await self.hud.send({"type": "music_mute", "seconds": secs + 1.5})
-            await self.view.send({"type": "segment", "video": f"/{ab['folder'].strip('/')}/{name}", "seconds": secs})
+            await self.view.send({"type": "segment", "video": f"/{ab['folder'].strip('/')}/{play}", "seconds": secs})
             await asyncio.sleep(secs + 0.5)
             await self.speak(BAG.draw(ab["outro"]), "happy", "pop_up", checked=True)
         finally:
@@ -597,6 +599,12 @@ class Runner:
     def _business(self):
         """Between-move business (chat replies, ads and reminders, a word on a new track) runs in the
         background while play goes on, one thing at a time."""
+        if self.config.maybe_reload():                 # a cheap mtime check: edits apply mid-session too
+            self.safety.apply(self.config.current)
+            self.vote_seconds = self.config.current.vote_window
+        if self.config.maybe_reload():                 # a cheap mtime check: edits apply mid-session too
+            self.safety.apply(self.config.current)
+            self.vote_seconds = self.config.current.vote_window
         # Replies have their own slot: a viewer waits for the line being spoken, not for the queue of
         # game lines behind it (on Mines that queue made replies 20-50 s late, which read as ignoring).
         if self.candidates and time.time() - self.last_chat_reply >= self.config.current.chat_reply_every \

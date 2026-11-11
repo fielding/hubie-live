@@ -76,6 +76,32 @@ def video_seconds(path: Path) -> float | None:
         return None
 
 
+AD_LOUDNESS_LUFS = -18      # a touch above Hubie's voice (-20), like a TV ad
+
+
+def leveled(src: Path) -> Path | None:
+    """A copy of an ad with its sound levelled (made once, kept in a "leveled" folder beside it).
+    Ads come in at any loudness (one measured -35.7 LUFS, far under his voice); the picture is copied
+    untouched. None if ffmpeg can't do it (the original plays instead)."""
+    dst = src.parent / "leveled" / (src.stem + ".mp4")
+    if dst.exists() and dst.stat().st_mtime >= src.stat().st_mtime:
+        return dst
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        return None
+    dst.parent.mkdir(exist_ok=True)
+    tmp = dst.with_suffix(".tmp.mp4")
+    try:
+        subprocess.run([ffmpeg, "-loglevel", "error", "-y", "-i", str(src), "-c:v", "copy",
+                        "-af", f"loudnorm=I={AD_LOUDNESS_LUFS}:TP=-1.5:LRA=11", "-c:a", "aac", "-b:a", "192k",
+                        "-movflags", "+faststart", str(tmp)], check=True, capture_output=True, timeout=600)
+        os.replace(tmp, dst)
+        return dst
+    except (subprocess.SubprocessError, OSError):
+        tmp.unlink(missing_ok=True)
+        return None
+
+
 def _crop(box) -> str:
     x, y, w, h = box
     return f"crop=iw*{w}/1920:ih*{h}/1080:iw*{x}/1920:ih*{y}/1080"
