@@ -129,12 +129,25 @@
   let segTimer = 0;
   function showSegment(m) {
     // Only our own assets: the show runner validated the path, and so do we.
-    if (typeof m.image !== 'string' || !/^\/assets\/segments\/[\w./-]+$/.test(m.image) || m.image.includes('..')) return;
-    const secs = Math.min(120, Math.max(1, Number(m.seconds) || 6));
-    seg.querySelector('img').src = m.image;
+    const ok = (p, dir) => typeof p === 'string' && new RegExp('^/assets/' + dir + '/[\\w./ -]+$').test(p) && !p.includes('..');
+    const img = seg.querySelector('img'), vid = seg.querySelector('video');
+    const secs = Math.min(125, Math.max(1, Number(m.seconds) || 6));
+    if (ok(m.video, 'ads')) {
+      // A commercial on Hubie's monitor (the ad break): plays with sound, hides when it ends.
+      img.style.display = 'none';
+      vid.style.display = 'block';
+      vid.src = encodeURI(m.video);
+      vid.currentTime = 0;
+      vid.play().catch((e) => console.error('[view] ad', e));
+      vid.onended = () => seg.classList.remove('on');
+    } else if (ok(m.image, 'segments')) {
+      vid.pause(); vid.removeAttribute('src'); vid.style.display = 'none';
+      img.style.display = 'block';
+      img.src = m.image;
+    } else return;
     seg.classList.add('on');
     clearTimeout(segTimer);
-    segTimer = setTimeout(() => seg.classList.remove('on'), secs * 1000);
+    segTimer = setTimeout(() => { seg.classList.remove('on'); vid.pause(); }, (secs + 1) * 1000);
   }
 
   // Over a real-site window (?realsite=1, the OBS front layer) the card goes transparent while

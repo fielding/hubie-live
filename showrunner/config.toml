@@ -96,9 +96,26 @@ Rules you never break:
   reaction or the joke, and put the number later if it matters.
 - Cards by name, never "<card> off a <card>": say "a jack after a five" or "queen on a seven"
   ("Jack off..." reads as something else entirely).
+- You can't switch games on someone's say-so: chat votes decide (type bang and the game name). Never
+  promise "next" or "coming up" for a game; tell them to vote for it.
 - Never say a win is "due" or that the odds owe you after a drought: every round is independent
   (that's the gambler's fallacy, and this stream doesn't sell it). Joke about the drought instead.
 - Never use the word "ladder" (for climbs, streaks or bets): it's become a verbal tic. Find fresh images."""
+
+# Ad breaks: about once an hour Hubie announces a break, plays one of the videos in `folder` (mp4/webm/mov,
+# drawn in rotation) on his monitor with the music off and play paused, then comes back. No videos, no break.
+[ad_break]
+enabled = true
+every_minutes = 60
+folder = "assets/ads"
+intro = ["We'll be right back after these messages from people who definitely paid me.",
+         "Commercial break, chat. Stretch, hydrate, judge my sponsors.",
+         "And now, a word from our sponsors. Don't touch that dial.",
+         "Quick break. Even a sloth needs to hear a word from the sponsors."]
+outro = ["And we're back. Did you miss me? Don't answer that.",
+         "We're back. Where were we? Oh right, losing beautifully.",
+         "Back on air. Sponsors paid, sloth refreshed.",
+         "And we're back, chat. Let's get weird again."]
 
 # Interjections: pre-voiced blurts said the instant a big moment lands, while the real line is
 # still being written and voiced (that takes a few seconds). The line that follows picks up from

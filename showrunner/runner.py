@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT / "puppet"))
 import tts  # noqa: E402
 
 log = logging.getLogger("runner")
+VIEWERS_FILE = Path(__file__).resolve().parent / ".viewers.json"   # chat memory, gitignored
 STATE_FILE = ROOT / "showrunner" / ".state.json"
 START_BALANCE = 10_000.0
 EMOTE = re.compile(r"\[emote:\d+:([\w-]+)\]")
@@ -71,6 +72,35 @@ _SPOTS = [
     (r"\b(?:center|centre|middle)\b", "the middle", [(2, 2)]),
     (r"\bcorners\b", "the corners", [(0, 0), (0, 4), (4, 0), (4, 4)]),
 ]
+
+
+_GAME_NAMES = {"mines": r"mines?", "tower": r"(?:dragon )?tower|dragon", "road": r"(?:hubie'?s )?road",
+               "plinko": r"plinko", "limbo": r"limbo", "coinflip": r"coin ?flip|flip", "wheel": r"wheel",
+               "hilo": r"hi[ -]?lo", "maxwin": r"max ?win", "dice": r"dice", "keno": r"keno"}
+_GAME_ASK = re.compile(r"\b(?:play|switch(?: it)? to|go(?: back)? to|get on|move to|change to|let'?s do|do|try|hit|spin)"
+                       r"(?: (?:the|those|that|some|a|on))? (" + "|".join(f"(?:{v})" for v in _GAME_NAMES.values()) + r")\b")
+
+
+_SOFTER = [(r"\bfuck(?:ing|in')\b", "freaking"), (r"\bfucker(?:s)?\b", "menace"), (r"\bfuck(?:ed)?\b", "frick"),
+           (r"\bmotherfucker\b", "menace"), (r"\bshit(?:ty)?\b", "crap"), (r"\bbastard(?:s)?\b", "rascal"),
+           (r"\bcoward(?:s|ly)?\b", "chicken"), (r"\bgutless\b", "timid"), (r"\bass\b", "butt"),
+           (r"\bbitch\b", "pest"), (r"\bdick\b", "jerk")]
+
+
+def soften(line: str) -> str:
+    """The voice's content filter refuses name-calling and some swears; the tamer word keeps the joke."""
+    for pat, sub in _SOFTER:
+        line = re.sub(pat, lambda m, sub=sub: sub.capitalize() if m.group(0)[:1].isupper() else sub, line, flags=re.I)
+    return line
+
+
+def game_request(text: str) -> str | None:
+    """A game asked for in plain words ("get on those mines", "play plinko"): counted as a vote, so
+    Hubie doesn't promise a switch only a vote can make."""
+    m = _GAME_ASK.search(text.lower())
+    if not m:
+        return None
+    return next((gid for gid, pat in _GAME_NAMES.items() if re.fullmatch(pat, m.group(1))), None)
 
 
 def tile_requests(text: str) -> list[tuple[str, tuple[int, int]]]:
@@ -140,7 +170,7 @@ class Runner:
         self.candidates: list = []               # (score, at, msg, verdict, reply task)
         self.recent: collections.deque = collections.deque(maxlen=12)
         # Chat memory for replies: each viewer's recent exchange with Hubie, and the room's last lines.
-        self.threads: collections.OrderedDict[str, collections.deque] = collections.OrderedDict()
+        self.threads: collections.OrderedDict[str, collections.deque] = self._load_threads()
         self.chat_log: collections.deque = collections.deque(maxlen=8)
         self._page_loaded_at = time.time()
         self._catch_at = 0.0
@@ -162,6 +192,9 @@ class Runner:
         self._tease_at = 0.0
         self._sticky_pick: dict[str, tuple[dict, float]] = {}   # game -> (chat's pick, until when)
         self._pick_open: dict[str, float] = {}      # game -> when its chat-pick vote opened
+        self._ad_clear = asyncio.Event()              # cleared while an ad break plays: play holds
+        self._ad_clear.set()
+        self._bg_filler = False                       # the background line is filler (gives way to replies)
         self._tile_asks: collections.deque = collections.deque(maxlen=10)   # Mines: chat's (row, col) picks, until when
         self._last_turn: dict[str, dict] = {}       # step games: the plan last used, per game
         self._plan_ahead: tuple[str, asyncio.Task] | None = None   # step games: next round's plan, written during this one
@@ -251,6 +284,17 @@ class Runner:
             # ElevenLabs' filter refuses name-calling aimed at someone ("you bastard") and violent
             # phrasing, not swearing. Optionally say those in the unfiltered voice; otherwise skip.
             if not self.config.current.fallback_voice:
+                # Usually one word sinks it ("...Fucker.", "bastard of a tile"): retry once softened
+                # instead of losing the line.
+                soft = soften(spoken)
+                if soft != spoken:
+                    try:
+                        async with venice.slot():
+                            clips = await asyncio.to_thread(self._render, soft, self.config.current.voice_speed)
+                        log.info("voice refused %r; said it softened", line)
+                        return soften(line), clips
+                    except tts.TTSError:
+                        pass
                 log.warning("voice refused %r; skipped", line)
                 return None
             try:
@@ -503,17 +547,63 @@ class Runner:
                 seen[user] = line
         return list(seen.values())[:4]
 
+    async def _hold(self):
+        """Wait while play is held: an admin pause, or an ad break."""
+        await self.paused.wait()
+        await self._ad_clear.wait()
+
+    def _ad_due(self) -> bool:
+        ab = self.config.current.ad_break
+        if not ab:
+            return False
+        last = self.st["segments_at"].setdefault("ad_break", time.time())
+        return time.time() - last >= ab["every_minutes"] * 60
+
+    async def ad_break(self):
+        """Hubie throws to a commercial: one of the videos in the ad folder plays on his monitor, the
+        music goes quiet and play holds, then he comes back."""
+        ab = self.config.current.ad_break
+        self.st["segments_at"]["ad_break"] = time.time()
+        self._save_state()
+        folder = ROOT / ab["folder"]
+        videos = sorted(p.name for p in folder.glob("*") if p.suffix.lower() in (".mp4", ".webm", ".mov")) \
+            if folder.is_dir() else []
+        if not videos:
+            return
+        name = BAG.draw(videos)
+        secs = await asyncio.to_thread(clipper_mod.video_seconds, folder / name)
+        if not secs:
+            log.warning("ad break: couldn't read %s; skipped", name)
+            return
+        secs = min(secs, 120.0)
+        log.info("ad break: %s (%.0fs)", name, secs)
+        self._ad_clear.clear()
+        try:
+            await self.speak(BAG.draw(ab["intro"]), "happy", "hat_tip", checked=True)
+            await self.hud.send({"type": "music_mute", "seconds": secs + 1.5})
+            await self.view.send({"type": "segment", "video": f"/{ab['folder'].strip('/')}/{name}", "seconds": secs})
+            await asyncio.sleep(secs + 0.5)
+            await self.speak(BAG.draw(ab["outro"]), "happy", "pop_up", checked=True)
+        finally:
+            self._ad_clear.set()
+
     def _business(self):
         """Between-move business (chat replies, ads and reminders, a word on a new track) runs in the
         background while play goes on, one thing at a time."""
         if self._bg_talk and not self._bg_talk.done():
-            return
+            # A viewer waiting beats filler that's still being written: answering someone 40-60 s late
+            # (behind check-ins) looked like ignoring them.
+            if not (self.candidates and self._bg_filler and not self.speak_lock.locked()):
+                return
+            self._bg_talk.cancel()
         if self.candidates and time.time() - self.last_chat_reply >= self.config.current.chat_reply_every:
             self._in_background(self.maybe_answer_chat())
+        elif self._ad_due():
+            self._in_background(self.ad_break())
         elif self._segment_due():
             self._in_background(self.maybe_run_segment())
         elif self._music_comment is not None:
-            self._in_background(self.maybe_comment_music())
+            self._in_background(self.maybe_comment_music(), filler=True)
 
     def _then(self, coro):
         """Queue a line behind the one in flight (instead of dropping it like _in_background)."""
@@ -583,7 +673,7 @@ class Runner:
 
     async def _climb(self, g, cfg, target, peak, next_talk, run_talk, stale, tfx):
         for _ in range(60):
-            await self.paused.wait()
+            await self._hold()
             self._business()
             can_cash = any(a["type"] == "cashout" for a in g.legal_actions())
             action = {"type": "cashout"} if can_cash and peak >= target else self._step_action(g)
@@ -648,13 +738,15 @@ class Runner:
                 self._in_background(self.speak(BAG.draw(lines), "laugh", self._default_reaction(ev), checked=True))
             await asyncio.sleep(0.6)
 
-    def _in_background(self, coro):
+    def _in_background(self, coro, filler: bool = False):
         """Start a comment (or chat reply) without stopping play; at most one runs at a time, so
-        lines can't pile up behind each other while the bets keep going."""
+        lines can't pile up behind each other while the bets keep going. filler: a check-in or chat
+        prompt, which gives way to a chat reply (see _business)."""
         if self._bg_talk and not self._bg_talk.done():
             coro.close()
             return
         self._bg_talk = asyncio.create_task(coro)
+        self._bg_filler = filler
 
     async def _auto_session(self, g):
         """One-shot games (dice, limbo, flip...): bets back to back without pausing, with pretend
@@ -688,7 +780,7 @@ class Runner:
         p_win = g.win_chance(action) if hasattr(g, "win_chance") else 0.5
         try:
             while played < 400:
-                await self.paused.wait()
+                await self._hold()
                 if self.pending_game and self.pending_game != g.id:
                     break
                 if self.config.current.rotate_minutes and \
@@ -767,7 +859,8 @@ class Runner:
                                  "talk_about": BAG.draw(CHECK_IN_ANGLES)}
                         if getattr(g, "streak_talk", True):
                             check.update(wins=wins, biggest_bet_units=round(peak_units, 2), bets_since_last_win=dry)
-                    self._in_background(self._talk(g, check))
+                    if not self.candidates:                 # a viewer waiting comes first
+                        self._in_background(self._talk(g, check), filler=True)
                 if ahead and ahead[0] != streak + 1:
                     ahead[1].cancel()                          # that streak is over (or its line was used)
                     ahead = None
@@ -813,7 +906,7 @@ class Runner:
                 self._in_background(self._opener(turn))
         every = self.config.current.grind_line_every
         for spin in range(1, 501):
-            await self.paused.wait()
+            await self._hold()
             self._business()
             if self.pending_game and self.pending_game != g.id:
                 return                                   # chat voted something else: stop here
@@ -847,7 +940,8 @@ class Runner:
                              "note": "Don't mention the spins or the drought. Talk TO chat."}
                 else:
                     check = {"kind": "check_in", "spins_so_far": spin, "talk_about": BAG.draw(CHECK_IN_ANGLES)}
-                self._in_background(self._talk(g, check))
+                if not self.candidates:
+                    self._in_background(self._talk(g, check), filler=True)
             else:
                 await asyncio.sleep(0.3)
 
@@ -885,7 +979,7 @@ class Runner:
             live = getattr(g, "live", False)
             hype = None
             for _ in range(40):                 # a round never takes more than 40 actions
-                await self.paused.wait()
+                await self._hold()
                 await self.maybe_answer_chat()  # chatters come first, even mid-round
                 turn, ready = await nxt
                 ready = await self._voiced(turn, ready)
@@ -1151,7 +1245,7 @@ class Runner:
         await self.push_stats()
         while True:
             try:
-                await self.paused.wait()                 # paused: no playing, no talking
+                await self._hold()                 # paused: no playing, no talking
                 if self.config.maybe_reload():           # config.toml edited while live
                     self.safety.apply(self.config.current)
                     self.vote_seconds = self.config.current.vote_window
@@ -1295,6 +1389,13 @@ class Runner:
             self.chat_log.append((msg.user.lower(), f"{msg.user}: {normalize(msg.text)[:120]}", time.time()))
             self._remember(msg.user, f"{msg.user}: {normalize(msg.text)[:160]}")
             await self.hud.send({"type": "chat", "id": msg.id, "user": msg.user, "text": normalize(msg.text)}, keep=True)
+            wanted = game_request(msg.text)
+            cmd = getattr(self.games.classes.get(wanted), "command", "") if wanted else ""
+            if cmd and wanted != self.game.id:
+                self._vote(msg.user, cmd)                 # the vote opens (and is announced) as if typed
+                await self._push_votes()
+                log.info("chat game ask: %s from %s", wanted, msg.user)
+                return
             spots = tile_requests(msg.text) if self.game.id == "mines" else []
             if spots:
                 # "Click the top corners first": he does it (the next reveals) and says so, instead of
@@ -1362,16 +1463,36 @@ class Runner:
             worst[4].cancel()
             self.candidates.remove(worst)
 
+    @staticmethod
+    def _load_threads() -> collections.OrderedDict:
+        """Viewers' conversations survive restarts, so a regular is still a regular."""
+        out = collections.OrderedDict()
+        try:
+            for user, lines in json.loads(VIEWERS_FILE.read_text()).items():
+                out[user] = collections.deque(lines, maxlen=30)
+        except (OSError, ValueError, AttributeError):
+            pass
+        return out
+
+    def _save_threads(self):
+        try:
+            tmp = VIEWERS_FILE.with_suffix(".tmp")
+            tmp.write_text(json.dumps({u: list(t) for u, t in self.threads.items()}))
+            os.replace(tmp, VIEWERS_FILE)
+        except OSError as e:
+            log.warning("couldn't save viewer memory: %s", e)
+
     def _remember(self, user: str, *lines: str):
         """This viewer's whole conversation with Hubie: everything they said (answered or not) and
         everything he said back, with the time, so a reply can pick up the thread."""
         key = user.lower()
         thread = self.threads.pop(key, None) or collections.deque(maxlen=30)
-        stamp = time.strftime("%H:%M")
+        stamp = time.strftime("%a %H:%M")             # the day too: memory now outlives a restart
         thread.extend(f"[{stamp}] {line}" for line in lines)
         self.threads[key] = thread                         # most recent last
         while len(self.threads) > 300:                     # forget the longest-quiet viewers
             self.threads.popitem(last=False)
+        self._save_threads()
 
     async def maybe_answer_chat(self):
         """Answer the best waiting chat message (between moves and between rounds), at most every

@@ -85,6 +85,7 @@
   if (part !== 'under') (function music() {
     const el = new Audio();
     let cfg = { volume: 0, duck_to: 0, tracks: [] }, queue = [], talking = 0, level = 0, current = null;
+    let quietUntil = 0;
     const peek = () => { if (!queue.length && cfg.tracks && cfg.tracks.length) queue = shuffle(cfg.tracks.slice()); return queue[0] ? queue[0].file : ''; };
     const report = () => current && fetch('/music/now', { method: 'POST', body: JSON.stringify({ file: current, next: peek() }) }).catch(() => {});
     const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -114,7 +115,7 @@
     el.onerror = () => schedule(2000);
     // Smooth ducking: ease toward the target level instead of jumping.
     setInterval(() => {
-      const target = !(cfg.volume > 0) ? 0 : talking ? cfg.duck_to : cfg.volume;
+      const target = !(cfg.volume > 0) || Date.now() < quietUntil ? 0 : talking ? cfg.duck_to : cfg.volume;
       level += (target - level) * 0.25;
       el.volume = Math.max(0, Math.min(1, level));
       if (!(cfg.volume > 0) && !el.paused) el.pause();
@@ -138,7 +139,11 @@
       let ws;
       try { ws = new WebSocket('ws://127.0.0.1:8767'); } catch (_) { setTimeout(listen, 3000); return; }
       ws.onmessage = (ev) => {
-        try { if (JSON.parse(ev.data).type === 'music_skip' && !el.paused) schedule(0); } catch (_) { /* not ours */ }
+        try {
+          const m = JSON.parse(ev.data);
+          if (m.type === 'music_skip' && !el.paused) schedule(0);
+          if (m.type === 'music_mute') quietUntil = Date.now() + Math.min(130, Number(m.seconds) || 0) * 1000;   // an ad break
+        } catch (_) { /* not ours */ }
       };
       ws.onclose = () => setTimeout(listen, 3000);
     })();

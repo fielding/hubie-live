@@ -210,7 +210,9 @@ class Safety:
                         "Is this line fine for the mascot of an 18+ casino stream to say? Talking about bets, "
                         "multipliers, cashing out, wins and busts is normal and fine; so are heavy swearing, crude humor, "
                         "calling a viewer names and savage profane trash talk aimed at their takes or luck; so is joking about what Hubie would "
-                        "buy if his demo winnings were real money. Not fine: threats, hate or slurs, "
+                        "buy if his demo winnings were real money; so are exaggerated jokes about losing and self-deprecation "
+                        "(\"or this sloth eats dirt\", \"not bad for a guy with three toes\", \"the reptile gets a souvenir\"). "
+                        "Not fine: threats, hate or slurs, "
                         "mocking anyone's identity or looks, explicit sexual content, telling viewers to gamble real money or chase losses, "
                         "promising guaranteed wins, personal data, politics or religion.")}}})
                 r.raise_for_status()

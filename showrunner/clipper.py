@@ -63,6 +63,19 @@ class OBS:
             return out
 
 
+def video_seconds(path: Path) -> float | None:
+    """A video's length in seconds (ffprobe), or None if it can't be read."""
+    probe = shutil.which("ffprobe")
+    if not probe:
+        return None
+    try:
+        out = subprocess.run([probe, "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+                             capture_output=True, text=True, timeout=15)
+        return float(out.stdout.strip())
+    except (subprocess.SubprocessError, OSError, ValueError):
+        return None
+
+
 def _crop(box) -> str:
     x, y, w, h = box
     return f"crop=iw*{w}/1920:ih*{h}/1080:iw*{x}/1920:ih*{y}/1080"

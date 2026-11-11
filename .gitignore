@@ -21,3 +21,6 @@ assets/desk/edits/*.png
 !assets/desk/edits/_input_white.png
 !assets/desk/edits/_mask_*.png
 assets/desk/edits/probe/
+showrunner/.viewers.json
+assets/ads/*
+!assets/ads/README.md

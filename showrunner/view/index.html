@@ -65,14 +65,14 @@
   @keyframes blink { 0%, 80%, 100% { opacity: .2; } 40% { opacity: 1; } }
   #segment { position: absolute; inset: 0; display: none; z-index: 6; background: var(--bg); }
   #segment.on { display: block; animation: pop .3s ease-out; }
-  #segment img { width: 100%; height: 100%; object-fit: contain; }
+  #segment img, #segment video { width: 100%; height: 100%; object-fit: contain; background: #000; }
   @keyframes fadeout { 0%, 82% { opacity: 1; } 100% { opacity: 0; } }
   @keyframes pop { from { transform: scale(.6); opacity: .2; } }
   @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
 </style>
 </head>
 <body>
-<div id="segment"><img alt=""></div>
+<div id="segment"><img alt=""><video playsinline style="display:none"></video></div>
 <div id="offline"><div class="inner"><div class="tag">HOUSEBETS IS LAGGING</div>
   <div class="big">BE RIGHT BACK<span class="dots"><span>.</span><span>.</span><span>.</span></span></div>
   <div class="sub">Hubie's still here. The game will be back in a sec.</div></div></div>

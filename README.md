@@ -37,6 +37,8 @@ show going through site outages without a human touching anything.
   - **Frozen window:** the page is reloaded.
   - **Downtime:** viewers see a "be right back" card while the site is down.
   - **Crashes:** the runner restarts itself without asking for keys again.
+- **Ad breaks:** about once an hour he throws to a commercial ("we'll be right back after these
+  messages"): a video from `assets/ads/` plays on his monitor with the music off and play paused.
 - **Fills the room:** NCS drum and bass that ducks under his voice (the tracks are credited on
   screen and with `!song`), timed ads and reminders, game rotation every 25 minutes when chat is
   quiet, and a "no human input" runtime clock.
@@ -191,7 +193,8 @@ After changing scene or HUD files, select the browser source and click **Refresh
 | "top corners", "middle", "bottom left", "tile 7" | during Mines: Hubie clicks those tiles next, in the order named |
 | `!song` / `!track`, `!next`, `!skip` | current track (NCS credit), up next, vote to skip |
 | `!commands`, `!record`, `!uptime`, `!rules` | the basics |
-| say "Hubie" | he answers |
+| "play plinko", "get on those mines" | counts as a vote for that game |
+| say "Hubie" | he answers (he remembers each viewer's conversation, across restarts) |
 
 When Housebets changed how Dice takes input mid-contest, a fresh browser couldn't get past Cloudflare to
 debug it, so Dice now tries several ways of setting the win chance and keeps the one the page's own payout

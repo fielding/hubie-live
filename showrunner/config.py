@@ -64,6 +64,7 @@ class Config:
     bot_commands: dict = None                # "!cmd" -> text the Kick bot posts
     catchphrase_chance: float = 0.0
     interjections: dict = None               # moment -> pre-voiced blurts said the instant it lands
+    ad_break: dict = None                    # {"every_minutes", "folder", "intro": [...], "outro": [...]} or None
 
 
 def _num(d, key, lo, hi, default=None):
@@ -86,6 +87,21 @@ def _bot_commands(cmds: dict) -> dict:
             raise ValueError(f"kickbot.commands {k!r}: needs !word = \"reply (<= 400 chars)\"")
         out[k.lower()] = v
     return out
+
+
+def _ad_break(ab) -> dict | None:
+    if not ab or not ab.get("enabled", True):
+        return None
+    folder = ab.get("folder", "assets/ads")
+    if not isinstance(folder, str) or ".." in folder or folder.startswith("/"):
+        raise ValueError("ad_break.folder: a folder inside the repo, like assets/ads")
+    lines = {}
+    for key in ("intro", "outro"):
+        v = ab.get(key, [])
+        if not isinstance(v, list) or not v or not all(isinstance(x, str) and 0 < len(x) <= 160 for x in v):
+            raise ValueError(f"ad_break.{key}: needs a list of short lines")
+        lines[key] = tuple(v)
+    return {"every_minutes": _num(ab, "every_minutes", 5, 1440, 60), "folder": folder, **lines}
 
 
 def parse(raw: dict) -> Config:
@@ -171,7 +187,7 @@ def parse(raw: dict) -> Config:
         kick_moderate=bool(raw.get("kickbot", {}).get("moderate", True)),
         ignore_users=frozenset(str(u).lower() for u in raw.get("kickbot", {}).get("ignore_users", [])),
         bot_commands=_bot_commands(raw.get("kickbot", {}).get("commands", {})),
-        catchphrase_chance=_num(cp, "chance", 0, 1, 0.3), interjections=blurts)
+        catchphrase_chance=_num(cp, "chance", 0, 1, 0.3), interjections=blurts, ad_break=_ad_break(raw.get("ad_break")))
 
 
 class LiveConfig:
