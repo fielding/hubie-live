@@ -123,6 +123,12 @@ def tile_requests(text: str) -> list[tuple[str, tuple[int, int]]]:
     return [(name, spot) for _, name, spot in found][:6]
 
 
+# What people actually type for a game, mapped to its real command.
+COMMAND_ALIASES = {"!dragontower": "!tower", "!dragon": "!tower", "!hubiesroad": "!road", "!hubieroad": "!road",
+                   "!coinflip": "!flip", "!coin": "!flip", "!hi-lo": "!hilo", "!higherlower": "!hilo",
+                   "!max": "!maxwin", "!max-win": "!maxwin", "!mine": "!mines", "!limb": "!limbo"}
+
+
 class _Bag:
     """Draws every item once, in random order, before any repeats (random.choice repeated itself a lot)."""
     def __init__(self):
@@ -163,7 +169,7 @@ class Runner:
         self.brain = brain_mod.Brain(self.config)
         self.games = GameRegistry()
         self.games.reload()
-        self.safety = Safety(commands=set(self.games.commands()))
+        self.safety = Safety(commands=set(self.games.commands()) | set(COMMAND_ALIASES))
         self.safety.apply(self.config.current)
         self.command_last: dict[str, float] = {}
         self.chat_q: asyncio.Queue = asyncio.Queue(maxsize=500)
@@ -195,6 +201,7 @@ class Runner:
         self._ad_clear = asyncio.Event()              # cleared while an ad break plays: play holds
         self._ad_clear.set()
         self._bg_filler = False                       # the background line is filler (gives way to replies)
+        self._reply_task: asyncio.Task | None = None  # the chat reply in progress (its own slot)
         self._tile_asks: collections.deque = collections.deque(maxlen=10)   # Mines: chat's (row, col) picks, until when
         self._last_turn: dict[str, dict] = {}       # step games: the plan last used, per game
         self._plan_ahead: tuple[str, asyncio.Task] | None = None   # step games: next round's plan, written during this one
@@ -590,15 +597,17 @@ class Runner:
     def _business(self):
         """Between-move business (chat replies, ads and reminders, a word on a new track) runs in the
         background while play goes on, one thing at a time."""
+        # Replies have their own slot: a viewer waits for the line being spoken, not for the queue of
+        # game lines behind it (on Mines that queue made replies 20-50 s late, which read as ignoring).
+        if self.candidates and time.time() - self.last_chat_reply >= self.config.current.chat_reply_every \
+                and not (self._reply_task and not self._reply_task.done()):
+            self._reply_task = asyncio.create_task(self.maybe_answer_chat())
+            if self._bg_talk and not self._bg_talk.done() and self._bg_filler and not self.speak_lock.locked():
+                self._bg_talk.cancel()                 # filler not yet spoken gives way
+            return
         if self._bg_talk and not self._bg_talk.done():
-            # A viewer waiting beats filler that's still being written: answering someone 40-60 s late
-            # (behind check-ins) looked like ignoring them.
-            if not (self.candidates and self._bg_filler and not self.speak_lock.locked()):
-                return
-            self._bg_talk.cancel()
-        if self.candidates and time.time() - self.last_chat_reply >= self.config.current.chat_reply_every:
-            self._in_background(self.maybe_answer_chat())
-        elif self._ad_due():
+            return
+        if self._ad_due():
             self._in_background(self.ad_break())
         elif self._segment_due():
             self._in_background(self.maybe_run_segment())
@@ -1251,7 +1260,7 @@ class Runner:
                     self.vote_seconds = self.config.current.vote_window
                 for gid in self.games.reload():          # hot-reload new or edited game plugins
                     log.info("game plugin loaded: %s", gid)
-                    self.safety.commands = set(self.games.commands())
+                    self.safety.commands = set(self.games.commands()) | set(COMMAND_ALIASES)
                 if self.pending_game:
                     gid, self.pending_game = self.pending_game, None
                     reason, votes = self.pending_reason
@@ -1380,6 +1389,7 @@ class Runner:
             asyncio.create_task(self._moderate(msg, v.reason))
         if v.action == "command":
             cmd, _, arg = v.reason.partition(" ")
+            cmd = COMMAND_ALIASES.get(cmd, cmd)
             self._vote(msg.user, cmd)
             self._pick(msg.user, cmd, arg)
             await self.hud.send({"type": "chat", "id": msg.id, "user": msg.user, "text": v.reason,
