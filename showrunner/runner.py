@@ -57,6 +57,42 @@ CHAT_ANGLES = ("a question for chat about their night", "calling out the lurkers
                "asking a recent chatter a follow-up about something they said")
 
 
+# Mines tiles chat can name: spots on the 5x5 board as (row, col), top-left is (0, 0).
+_SPOTS = [
+    (r"\b(?:all|four|4) corners\b", "all four corners", [(0, 0), (0, 4), (4, 0), (4, 4)]),
+    (r"\btop corners\b", "top corners", [(0, 0), (0, 4)]),
+    (r"\bbottom corners\b", "bottom corners", [(4, 0), (4, 4)]),
+    (r"\bleft corners\b", "left corners", [(0, 0), (4, 0)]),
+    (r"\bright corners\b", "right corners", [(0, 4), (4, 4)]),
+    (r"\b(?:top|upper)[ -]left|\bleft[ -]top\b", "top left", [(0, 0)]),
+    (r"\b(?:top|upper)[ -]right|\bright[ -]top\b", "top right", [(0, 4)]),
+    (r"\b(?:bottom|lower)[ -]left|\bleft[ -]bottom\b", "bottom left", [(4, 0)]),
+    (r"\b(?:bottom|lower)[ -]right|\bright[ -]bottom\b", "bottom right", [(4, 4)]),
+    (r"\b(?:center|centre|middle)\b", "the middle", [(2, 2)]),
+    (r"\bcorners\b", "the corners", [(0, 0), (0, 4), (4, 0), (4, 4)]),
+]
+
+
+def tile_requests(text: str) -> list[tuple[str, tuple[int, int]]]:
+    """Tiles a chat message asks for, in the order it names them: "top corners", "right top corner
+    then left top", "middle", "tile 7" / "tiles 1 5 25" (1-25, left to right, top to bottom).
+    Fixed phrases, not the model: chat can steer which tile, never anything else."""
+    low = text.lower()
+    found, taken = [], []
+    for pattern, name, spots in _SPOTS:
+        for m in re.finditer(pattern, low):
+            if any(a < m.end() and m.start() < b for a, b in taken):
+                continue                                   # "top corners" already covers "corners"
+            taken.append((m.start(), m.end()))
+            found += [(m.start(), name, s) for s in spots]
+    for m in re.finditer(r"\btiles? ((?:\d{1,2}[ ,]*)+)", low):
+        for n in re.findall(r"\d{1,2}", m.group(1)):
+            if 1 <= int(n) <= 25:
+                found.append((m.start(), f"tile {n}", ((int(n) - 1) // 5, (int(n) - 1) % 5)))
+    found.sort(key=lambda f: f[0])
+    return [(name, spot) for _, name, spot in found][:6]
+
+
 class _Bag:
     """Draws every item once, in random order, before any repeats (random.choice repeated itself a lot)."""
     def __init__(self):
@@ -126,6 +162,7 @@ class Runner:
         self._tease_at = 0.0
         self._sticky_pick: dict[str, tuple[dict, float]] = {}   # game -> (chat's pick, until when)
         self._pick_open: dict[str, float] = {}      # game -> when its chat-pick vote opened
+        self._tile_asks: collections.deque = collections.deque(maxlen=10)   # Mines: chat's (row, col) picks, until when
         self._last_turn: dict[str, dict] = {}       # step games: the plan last used, per game
         self._plan_ahead: tuple[str, asyncio.Task] | None = None   # step games: next round's plan, written during this one
         self.now_playing: dict | None = None                       # set by the stage page's music player
@@ -449,6 +486,10 @@ class Runner:
         await self.play(await line, "laugh", "pop_up")
 
     def _step_action(self, g) -> dict:
+        while g.id == "mines" and self._tile_asks:
+            pos, until = self._tile_asks.popleft()
+            if time.time() < until:
+                return {"type": "reveal", "pos": pos}
         if hasattr(g, "step_action"):
             return g.step_action()
         return {"type": next(a["type"] for a in g.legal_actions() if a["type"] != "cashout")}
@@ -1254,6 +1295,16 @@ class Runner:
             self.chat_log.append((msg.user.lower(), f"{msg.user}: {normalize(msg.text)[:120]}", time.time()))
             self._remember(msg.user, f"{msg.user}: {normalize(msg.text)[:160]}")
             await self.hud.send({"type": "chat", "id": msg.id, "user": msg.user, "text": normalize(msg.text)}, keep=True)
+            spots = tile_requests(msg.text) if self.game.id == "mines" else []
+            if spots:
+                # "Click the top corners first": he does it (the next reveals) and says so, instead of
+                # just talking about it.
+                until = time.time() + 60
+                self._tile_asks.extend((pos, until) for _, pos in spots)
+                said = " then ".join(dict.fromkeys(name for name, _ in spots))
+                self._then(self.speak(f"{said[:1].upper()}{said[1:]}, {msg.user}'s call.", "focused", "nod"))
+                log.info("chat tiles: %s from %s", [pos for _, pos in spots], msg.user)
+                return
             if v.action == "reply":
                 self._queue_reply(msg, v)
         elif v.action == "info":

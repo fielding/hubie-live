@@ -148,10 +148,26 @@ class HousebetsMines(HousebetsGame):
         self.round = {"status": "playing", "mines": mines, "revealed": []}
         return {"kind": "start", "bet": 0, "mines": mines}
 
+    async def _tile_at(self, row: int, col: int) -> int | None:
+        """The tile index at a board position, read from where the tiles actually sit on the page
+        (not assumed from the index order)."""
+        tiles = await self.query(SEL["tiles"])
+        spots = [(t["rect"][1], t["rect"][0], int(t["attrs"].get("data-idx", -1))) for t in tiles if t.get("rect")]
+        if len(spots) != TILES:
+            return None
+        ys = sorted({round(y) for y, _, _ in spots})
+        rows = sorted(spots)                                    # top to bottom, then left to right
+        grid = [sorted(rows[i * 5:(i + 1) * 5], key=lambda s: s[1]) for i in range(5)]
+        return grid[row][col][2] if len(ys) >= 5 else None
+
     async def _reveal(self, action: dict) -> dict:
         r = self.round
         hidden = [t for t in range(TILES) if t not in r["revealed"]]
         tile = action.get("tile")
+        if tile is None and action.get("pos"):
+            tile = await self._tile_at(*action["pos"])          # chat asked for this spot
+            if tile not in hidden:
+                tile = None                                     # already open: pick another
         if tile is None:
             tile = random.SystemRandom().choice(hidden)
         if tile not in hidden:
