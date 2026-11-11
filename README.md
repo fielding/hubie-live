@@ -187,7 +187,8 @@ After changing scene or HUD files, select the browser source and click **Refresh
 | Chat | Does |
 |---|---|
 | `!tower` `!road` `!plinko` `!limbo` `!flip` `!wheel` `!hilo` `!maxwin` `!mines` `!dice` `!keno` | vote for the next game (60 s poll) |
-| `!mines 1-24` | pick the next Mines round's mine count |
+| `!mines 1-24` | open a 20 s vote on the mine count; the winner holds for 3 minutes |
+| "top corners", "middle", "bottom left", "tile 7" | during Mines: Hubie clicks those tiles next, in the order named |
 | `!song` / `!track`, `!next`, `!skip` | current track (NCS credit), up next, vote to skip |
 | `!commands`, `!record`, `!uptime`, `!rules` | the basics |
 | say "Hubie" | he answers |
