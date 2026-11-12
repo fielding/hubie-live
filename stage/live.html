@@ -36,10 +36,13 @@
   #frame, #frametop { left: 847px; top: 46px; width: 910px; }
   #game { left: 880px; top: 87px; width: 843px; height: 501px; }
   /* Ad breaks: the commercial starts on the monitor, grows to full screen, and shrinks back. */
-  #adplayer { position: absolute; z-index: 50; display: none; background: #000; overflow: hidden;
+  /* On the monitor the ad sits behind the bezel (#frametop), like the game; full screen it's on top. */
+  #frametop { z-index: 2; }
+  #adplayer { position: absolute; z-index: 1; display: none; background: #000; overflow: hidden;
               transition: left .9s cubic-bezier(.65,0,.35,1), top .9s cubic-bezier(.65,0,.35,1),
                           width .9s cubic-bezier(.65,0,.35,1), height .9s cubic-bezier(.65,0,.35,1); }
   #adplayer.on { display: block; }
+  #adplayer.top { z-index: 60; }
   #adplayer video { width: 100%; height: 100%; object-fit: contain; }
   /* Rug on the floor, partly behind the desk; crate in front of the console's right end. */
   #rug { left: 792px; top: 990px; width: 873px; }
@@ -60,6 +63,7 @@
 <img id="rug" src="../assets/scene/rug.png" alt="">
 <img id="frame" src="../assets/scene/game_frame.png" alt="">
 <iframe id="game" src="../showrunner/view/index.html"></iframe>
+<div id="adplayer"><video playsinline></video></div>
 <img id="frametop" src="../assets/scene/game_frame_top.png" alt="">
 <img id="panel" src="../assets/scene/chat_panel.png" alt="">
 <iframe class="full" id="puppet" src="../puppet/index.html?x=367&amp;y=1075&amp;scale=0.316&amp;look=right" allow="autoplay"></iframe>
@@ -158,7 +162,6 @@
     next();
   })();
 </script>
-<div id="adplayer"><video playsinline></video></div>
 <script>
   // Ad breaks (front part only, so OBS hears the ad once). The show runner sends
   // {"type": "ad", "video": "/assets/ads/x.mp4", "seconds": n, "placement": "zoom" | "monitor" | "full"}.
@@ -166,18 +169,20 @@
     const part = new URLSearchParams(location.search).get('part');
     if (part === 'under') return;
     const box = document.getElementById('adplayer'), vid = box.querySelector('video');
-    const mon = () => { const r = document.getElementById('game').getBoundingClientRect();
-                        return [r.left, r.top, r.width, r.height]; };
+    const mon = () => { const g = document.getElementById('game');   // scene coordinates, like the player's
+                        return [g.offsetLeft, g.offsetTop, g.offsetWidth, g.offsetHeight]; };
     const FULL = [0, 0, 1920, 1080];
     const place = ([x, y, w, h]) => Object.assign(box.style, { left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px' });
     let timers = [];
-    const stop = () => { timers.forEach(clearTimeout); timers = []; vid.pause(); vid.removeAttribute('src'); box.classList.remove('on'); };
+    const stop = () => { timers.forEach(clearTimeout); timers = []; vid.pause(); vid.removeAttribute('src');
+                         box.classList.remove('on', 'top'); };
     function play(m) {
       if (typeof m.video !== 'string' || !/^\/assets\/ads\/[\w./ -]+$/.test(m.video) || m.video.includes('..')) return;
       stop();
       const secs = Math.min(125, Math.max(1, Number(m.seconds) || 30));
       const how = ['zoom', 'monitor', 'full'].includes(m.placement) ? m.placement : 'zoom';
       box.style.transition = 'none';
+      box.classList.toggle('top', how === 'full');
       place(how === 'full' ? FULL : mon());
       void box.offsetWidth;                      // apply the start frame before animating
       box.style.transition = '';
@@ -186,8 +191,13 @@
       vid.currentTime = 0;
       vid.play().catch((e) => console.error('[ad]', e));
       if (how === 'zoom') {
-        timers.push(setTimeout(() => place(FULL), 1500));                         // grow out of the monitor
-        if (secs > 6) timers.push(setTimeout(() => place(mon()), (secs - 2.2) * 1000));   // and settle back in
+        // Grow out of the monitor (on top from the first frame of the move), then settle back in and
+        // tuck behind the bezel once it has landed, so its square corners never show over the frame.
+        timers.push(setTimeout(() => { box.classList.add('top'); place(FULL); }, 1500));
+        if (secs > 6) {
+          timers.push(setTimeout(() => place(mon()), (secs - 2.2) * 1000));
+          timers.push(setTimeout(() => box.classList.remove('top'), (secs - 2.2 + 0.95) * 1000));
+        }
       }
       timers.push(setTimeout(stop, (secs + 0.6) * 1000));
       vid.onended = () => timers.push(setTimeout(stop, 400));
