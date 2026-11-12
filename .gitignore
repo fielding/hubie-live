@@ -26,3 +26,4 @@ assets/ads/*
 !assets/ads/README.md
 showrunner/.config.last-good.toml
 demo/ad/monitor.mp4
+demo/ad/clips/

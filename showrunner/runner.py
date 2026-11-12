@@ -476,7 +476,9 @@ class Runner:
         if stale and stale.is_set():
             return False                               # the round moved on while it was being written
         if r and ready:
-            return await self.play(ready, r["expression"], r["reaction"] or self._default_reaction(event))
+            # A big cash-out gets the dapper bow-tie straighten (a signature move, not left to chance).
+            dapper = event.get("kind") == "cashout" and float(event.get("multiplier") or 0) >= 50
+            return await self.play(ready, r["expression"], "bowtie" if dapper else (r["reaction"] or self._default_reaction(event)))
         return False
 
     # ---- interjections --------------------------------------------------------------
@@ -535,6 +537,7 @@ class Runner:
         if blurt:
             await self._say_blurt(blurt, {"kind": "win"})
         await self.play(await line, "laugh", "pop_up")
+        await self.puppet.reaction("bowtie")             # then composes himself, like he meant to do that
 
     def _step_action(self, g) -> dict:
         while g.id == "mines" and self._tile_asks:
@@ -588,7 +591,7 @@ class Runner:
         log.info("ad break: %s (%.0fs)", name, secs)
         self._ad_clear.clear()
         try:
-            await self.speak(BAG.draw(ab["intro"]), "happy", "hat_tip", checked=True)
+            await self.speak(BAG.draw(ab["intro"]), "smug", "bowtie", checked=True)   # straightens up for the sponsors
             await self.hud.send({"type": "music_mute", "seconds": secs + 1.5})
             placement = ab["placements"].get(name, ab["placement"])
             await self.hud.send({"type": "ad", "video": f"/{ab['folder'].strip('/')}/{play}", "seconds": secs,
