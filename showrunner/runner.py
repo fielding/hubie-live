@@ -927,6 +927,9 @@ class Runner:
             self._business()
             if self.pending_game and self.pending_game != g.id:
                 return                                   # chat voted something else: stop here
+            if self.config.current.rotate_minutes and \
+                    time.time() - self._game_since > self.config.current.rotate_minutes * 60:
+                return                                   # a long drought can't hold the rotation hostage
             await self.puppet.send({"type": "typing", "seconds": 0.4})
             event = await self._act(g, dict(action))
             event["spin"] = spin
