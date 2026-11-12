@@ -16,6 +16,9 @@ Everything runs on one Mac. Plan on about 30 minutes the first time.
 - **Start Chrome with** `--disable-backgrounding-occluded-windows`, so a covered window keeps playing.
 - **Load the extension:** go to `chrome://extensions`, turn on Developer mode, click "Load unpacked" and pick `extension/`.
 - **Keep the site active:** in `chrome://settings/performance`, add `housebets.com` to "Always keep these sites active".
+- **One profile only:** install the extension in the Chrome profile that plays, not in a second profile too.
+- **Keep the Mac awake:** in System Settings, stop it sleeping (or run the show under `caffeinate -dims`).
+  A sleeping Mac drops chat, the models and the stream; Hubie recovers, but viewers see the gap.
 
 **4. Get music (optional).**
 - `uv run --with httpx python tools/ncs_fetch.py --genres 3,29 --per-genre 40` downloads NCS drum and bass.
@@ -33,7 +36,11 @@ Everything runs on one Mac. Plan on about 30 minutes the first time.
 - **Settings → Output → Replay Buffer:** turn it on, 60 s.
 - **Tools → WebSocket Server Settings:** turn it on, port 4455, with a password. That password is `OBS_WS_PASSWORD`.
 
-**8. Go live.**
+**8. Add ad breaks (optional).**
+- Drop commercials (mp4, webm or mov, up to 2 minutes) into `assets/ads/`. About once an hour Hubie
+  throws to a break and plays the next one. Interval, lines and placement are in `[ad_break]` in `config.toml`.
+
+**9. Go live.**
 - In OBS, use your Kick stream key with a 2 s keyframe interval and press Start Streaming.
 - From then on, don't touch anything. Hubie recovers from crashes, site outages and frozen windows himself.
 - Settings in `showrunner/config.toml` can be changed while he runs. Changing them counts as a human action under the contest rules.
@@ -42,4 +49,5 @@ Everything runs on one Mac. Plan on about 30 minutes the first time.
 - **The game is black:** Hubie reloads it on his own within about 90 s. Viewers see a "be right back" card meanwhile.
 - **No voice:** check `VENICE_API_KEY`.
 - **No chat:** check the channel id you passed as `--kick-channel` (the default is the author's channel).
+- **After updating the code:** refresh the two OBS browser sources (select, then Refresh) to load new stage art and players.
 - Architecture, agents and tools are in [README.md](README.md).

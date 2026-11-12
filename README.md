@@ -15,15 +15,22 @@ show going through site outages without a human touching anything.
   - **Step games** (Tower, Road, Mines, HiLo): one AI plan per round (difficulty, cash-out target),
     then he climbs without stopping and only talks when the run gets interesting (5x, 10x, 20x...).
   - **One-shot games:** continuous auto sessions with pretend bet sizing that presses on wins.
-    Dice at 6x, Limbo at 7x, Plinko in 5-ball bursts on max rows.
+    Dice at 6x, Limbo at 7x, Plinko in 5-ball bursts on max rows, Keno on ten numbers at a risk he
+    picks (mostly high).
+  - **Picks his own settings** where a game has them: mine count, difficulty, wheel risk, Max Win mode,
+    Keno risk. Chat can overrule the mine count with a vote.
   - **Streak talk scales with the odds:** two 6x wins in a row is a tease, five is the clip of the night.
   - **Commentary never stops play:** lines, chat replies and ads play over the clicks; the next
     round is planned while the current one runs. See [Feeling live](#feeling-live).
 - **Talks:** DeepSeek through Venice for the brain, ElevenLabs "Theo Silk" through Venice for the
   voice, with Rhubarb lip sync. He swears (18+ stream), roasts chat back, and mocks balance questions.
 - **Reads chat:**
-  - **Replies with context:** answers in priority order and knows what each viewer said before.
-  - **Votes:** `!<game>` votes, `!mines 10` picks, `!skip`/`!next`/`!song` for music.
+  - **Replies with context:** answers in priority order and remembers each viewer's whole conversation
+    (what they said, answered or not, and what he said back), kept across restarts.
+  - **Answers first:** a waiting reply jumps ahead of his own filler and game chatter.
+  - **Votes:** `!<game>` votes (aliases like `!dragontower` work, and so does "play plinko"),
+    `!mines 10` votes, `!skip`/`!next`/`!song` for music.
+  - **Takes Mines calls:** "top corners", "middle", "tile 7": he clicks those tiles next.
   - **Thanks new followers** with an on-screen alert.
 - **Moderates:** a Kick bot account deletes links, prompt-injection attempts and hate, and times out
   repeat offenders. Strict injection filtering, since it all runs on a home machine.
@@ -37,6 +44,8 @@ show going through site outages without a human touching anything.
   - **Frozen window:** the page is reloaded.
   - **Downtime:** viewers see a "be right back" card while the site is down.
   - **Crashes:** the runner restarts itself without asking for keys again.
+  - **Bad config edits:** rejected while live; at startup he falls back to the last config that worked.
+  - **Network drops:** chat, models and the game reconnect and retry on their own.
 - **Ad breaks:** about once an hour he throws to a commercial ("we'll be right back after these
   messages"): a video from `assets/ads/` starts on his monitor, grows to full screen and settles
   back, with its sound levelled, the music off and play paused.
@@ -91,7 +100,7 @@ flowchart LR
 | Safety | scores every chat message (injection, harassment, spam, gambling harm), checks every line before it's voiced | Venice decisions classifier + regex rules |
 | Moderator | deletes links, injection attempts and hate; times out repeat offenders | Kick official API (bot account) |
 | Voice | voices lines (safety-checked in parallel), caches them, levels loudness; keeps a bank of pre-voiced interjections | ElevenLabs Turbo v2.5 (Theo Silk) via Venice, ffmpeg |
-| Puppet | animated Hubie from the official art: lip sync, blinks, expressions, reactions | Canvas 2D, Rhubarb Lip Sync, face parts made with Venice image edits |
+| Puppet | animated Hubie from the official art: lip sync, blinks, expressions, reactions (a signature bow-tie straighten on records, big cash-outs and ad breaks) | Canvas 2D, Rhubarb Lip Sync, face parts and poses made with Venice image edits |
 | Player | drives the real games: picks, bets, reads results, fails closed on any non-zero bet | Chrome extension (MV3) over a local websocket |
 | Watchdogs | spot a dead or frozen game window, site reloads, offline games; recover without a human | macOS window capture, page reload, game rotation |
 | Clipper | saves big hits as 16:9 and vertical 9:16 clips | OBS websocket + replay buffer, ffmpeg, Pillow |
@@ -105,13 +114,17 @@ buffers:
 - **Instant interjections:** when a big moment lands (a hit, a hot streak, a deep run, a painful
   bust) he blurts a pre-voiced line from a bank ("Oh, look at that!", "Steady, sloth. Steady.") at
   once. The real line is written in parallel, told what he just blurted, and follows on from it. One
-  blurt per 20 s at most, never one of the last six, so they stay a reaction and not a tic.
+  blurt per 45 s at most, never one of the last six, so they stay a reaction and not a tic.
 - **Lines written before they're needed:** in auto sessions, when one more win would make a streak
   worth talking about, that line is written while the bet is still in the air (and voiced ahead for
   the rare tiers), so it plays right on the hit.
 - **Play never waits on talk:** step games plan the next round during the current one, run lines
   play over the next clicks (a line that's stale by the time it's ready is dropped for the result),
   and the safety check runs alongside the voice render instead of before it.
+- **Viewers never wait behind the show:** chat replies have their own slot, so a reply waits only
+  for the line being spoken, not for a queue of game commentary.
+- **Switching games:** the next game loads while he announces it (a switch went from 21-30 s of dead
+  air to about 7 s).
 - **Measured, not guessed:** the runner logs every gap over 3 s where nothing moved in the game
   (`timing: game idle ...`) and each line's write and voice time.
 
@@ -197,18 +210,23 @@ After changing scene or HUD files, select the browser source and click **Refresh
 | "play plinko", "get on those mines" | counts as a vote for that game |
 | say "Hubie" | he answers (he remembers each viewer's conversation, across restarts) |
 
-When Housebets changed how Dice takes input mid-contest, a fresh browser couldn't get past Cloudflare to
-debug it, so Dice now tries several ways of setting the win chance and keeps the one the page's own payout
-readout confirms. A game that still fails saves a page snapshot and is benched for a few minutes.
+When Housebets changed how Dice takes input mid-contest (its boxes now show whatever is typed even when
+the game ignores it), a fresh browser couldn't get past Cloudflare to debug it. So Dice reads the game's
+real roll target from its slider, steps the slider with arrow keys, and rejects any result that doesn't
+fit the odds it thinks it's playing (Limbo checks its results the same way). A game that fails saves a
+page snapshot and is benched for a few minutes, then retried.
 
 ## Configuration
 
-`showrunner/config.toml` is re-read between rounds, and a bad edit is rejected and logged. It covers:
+`showrunner/config.toml` is re-read live, even mid-session. A bad edit is rejected and logged, and a
+bad file at startup falls back to the last good one (`.config.last-good.toml`). It covers:
 - **Models and voice:** model fallbacks, voice speed.
 - **Pacing:** `fast_play`, `talk_from_x`, game rotation, chat reply rate.
 - **Safety and persona:** safety thresholds and the persona prompt (his voice, trash-talk rules, hard lines).
 - **Chat:** bot commands, catchphrases, and the instant interjection bank (`[interjections]`).
 - **Segments:** timed ads and reminders.
+- **Ad breaks (`[ad_break]`):** interval, intro and outro lines, and per-video placement (`zoom`,
+  `monitor` or `full`). Videos go in `assets/ads/` and are levelled to -18 LUFS on first play.
 - **Music:** volume, ducking and skip votes.
 
 ## Music
@@ -247,6 +265,11 @@ the HUD and `!song` can credit each one.
 - **License:** all rights reserved; shared as a Housebets contest entry (see `LICENSE`).
 - **Secrets:** API keys come from the environment (or 1Password via `op`) and are never written to disk.
   Kick bot tokens live in `showrunner/.kick_tokens.json` (gitignored, mode 600).
+- **Viewer data:** each viewer's chat with Hubie is kept in `showrunner/.viewers.json` on the streaming
+  machine only (gitignored, last 30 lines per viewer, longest-quiet viewers dropped past 300).
 - **AI assets:** the desk scene, face parts and poses were generated with Venice image models
-  from the official Hubie art (`Dapper Sloth at the Desk.png` is the concept the scene is built on). `tools/gen_faces.py` rebuilds new face
-  parts the same way.
+  from the official Hubie art (`Dapper Sloth at the Desk.png` is the concept the scene is built on).
+  `tools/gen_faces.py` and `tools/gen_poses.py` make new face parts and body poses the same way.
+- **Demo and ad tools (`demo/`):** `render_script.py` pre-voices a scripted scene, `export.py` records
+  the stage playing it to an MP4 (with camera moves, headlines and captions in ad mode), and
+  `demo/ad/pull_clips.py` cuts moments out of the channel's Kick VODs by clock time.
