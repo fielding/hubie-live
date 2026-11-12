@@ -108,6 +108,9 @@ Rules you never break:
 enabled = true
 every_minutes = 60
 folder = "assets/ads"
+# zoom: starts on his monitor, grows to full screen, shrinks back at the end; monitor: stays on the
+# monitor; full: full screen throughout. Per video in [ad_break.placements], e.g. "my ad.mp4" = "full".
+placement = "zoom"
 intro = ["We'll be right back after these messages from people who definitely paid me.",
          "Commercial break, chat. Stretch, hydrate, judge my sponsors.",
          "And now, a word from our sponsors. Don't touch that dial.",

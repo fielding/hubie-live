@@ -590,7 +590,9 @@ class Runner:
         try:
             await self.speak(BAG.draw(ab["intro"]), "happy", "hat_tip", checked=True)
             await self.hud.send({"type": "music_mute", "seconds": secs + 1.5})
-            await self.view.send({"type": "segment", "video": f"/{ab['folder'].strip('/')}/{play}", "seconds": secs})
+            placement = ab["placements"].get(name, ab["placement"])
+            await self.hud.send({"type": "ad", "video": f"/{ab['folder'].strip('/')}/{play}", "seconds": secs,
+                                 "placement": placement})
             await asyncio.sleep(secs + 0.5)
             await self.speak(BAG.draw(ab["outro"]), "happy", "pop_up", checked=True)
         finally:

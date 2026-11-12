@@ -101,7 +101,13 @@ def _ad_break(ab) -> dict | None:
         if not isinstance(v, list) or not v or not all(isinstance(x, str) and 0 < len(x) <= 160 for x in v):
             raise ValueError(f"ad_break.{key}: needs a list of short lines")
         lines[key] = tuple(v)
-    return {"every_minutes": _num(ab, "every_minutes", 1, 1440, 60), "folder": folder, **lines}
+    kinds = ("zoom", "monitor", "full")
+    placement = ab.get("placement", "zoom")
+    places = ab.get("placements", {})
+    if placement not in kinds or not isinstance(places, dict) or any(v not in kinds for v in places.values()):
+        raise ValueError("ad_break.placement(s): zoom, monitor or full")
+    return {"every_minutes": _num(ab, "every_minutes", 1, 1440, 60), "folder": folder, **lines,
+            "placement": placement, "placements": dict(places)}
 
 
 def parse(raw: dict) -> Config:

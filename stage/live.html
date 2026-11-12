@@ -35,6 +35,12 @@
      Art 1536x1024 at 910 wide; the screen opening (66,79)-(1467,903) lands at 886,93-1717,582. */
   #frame, #frametop { left: 847px; top: 46px; width: 910px; }
   #game { left: 880px; top: 87px; width: 843px; height: 501px; }
+  /* Ad breaks: the commercial starts on the monitor, grows to full screen, and shrinks back. */
+  #adplayer { position: absolute; z-index: 50; display: none; background: #000; overflow: hidden;
+              transition: left .9s cubic-bezier(.65,0,.35,1), top .9s cubic-bezier(.65,0,.35,1),
+                          width .9s cubic-bezier(.65,0,.35,1), height .9s cubic-bezier(.65,0,.35,1); }
+  #adplayer.on { display: block; }
+  #adplayer video { width: 100%; height: 100%; object-fit: contain; }
   /* Rug on the floor, partly behind the desk; crate in front of the console's right end. */
   #rug { left: 792px; top: 990px; width: 873px; }
   #crate { left: 1690px; top: 852px; width: 330px; }
@@ -150,6 +156,48 @@
     document.getElementById('puppet').addEventListener('load', hook);
     hook();
     next();
+  })();
+</script>
+<div id="adplayer"><video playsinline></video></div>
+<script>
+  // Ad breaks (front part only, so OBS hears the ad once). The show runner sends
+  // {"type": "ad", "video": "/assets/ads/x.mp4", "seconds": n, "placement": "zoom" | "monitor" | "full"}.
+  (function ads() {
+    const part = new URLSearchParams(location.search).get('part');
+    if (part === 'under') return;
+    const box = document.getElementById('adplayer'), vid = box.querySelector('video');
+    const mon = () => { const r = document.getElementById('game').getBoundingClientRect();
+                        return [r.left, r.top, r.width, r.height]; };
+    const FULL = [0, 0, 1920, 1080];
+    const place = ([x, y, w, h]) => Object.assign(box.style, { left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px' });
+    let timers = [];
+    const stop = () => { timers.forEach(clearTimeout); timers = []; vid.pause(); vid.removeAttribute('src'); box.classList.remove('on'); };
+    function play(m) {
+      if (typeof m.video !== 'string' || !/^\/assets\/ads\/[\w./ -]+$/.test(m.video) || m.video.includes('..')) return;
+      stop();
+      const secs = Math.min(125, Math.max(1, Number(m.seconds) || 30));
+      const how = ['zoom', 'monitor', 'full'].includes(m.placement) ? m.placement : 'zoom';
+      box.style.transition = 'none';
+      place(how === 'full' ? FULL : mon());
+      void box.offsetWidth;                      // apply the start frame before animating
+      box.style.transition = '';
+      box.classList.add('on');
+      vid.src = encodeURI(m.video);
+      vid.currentTime = 0;
+      vid.play().catch((e) => console.error('[ad]', e));
+      if (how === 'zoom') {
+        timers.push(setTimeout(() => place(FULL), 1500));                         // grow out of the monitor
+        if (secs > 6) timers.push(setTimeout(() => place(mon()), (secs - 2.2) * 1000));   // and settle back in
+      }
+      timers.push(setTimeout(stop, (secs + 0.6) * 1000));
+      vid.onended = () => timers.push(setTimeout(stop, 400));
+    }
+    (function listen() {
+      let ws;
+      try { ws = new WebSocket('ws://127.0.0.1:8767'); } catch (_) { setTimeout(listen, 3000); return; }
+      ws.onmessage = (ev) => { try { const m = JSON.parse(ev.data); if (m.type === 'ad') play(m); } catch (_) { /* not ours */ } };
+      ws.onclose = () => setTimeout(listen, 3000);
+    })();
   })();
 </script>
 </body>
