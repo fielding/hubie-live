@@ -9,7 +9,7 @@ from pathlib import Path
 log = logging.getLogger("config")
 PATH = Path(__file__).resolve().parent / "config.toml"
 EXPRESSIONS = {"neutral", "happy", "laugh", "surprised", "thinking", "focused", "smug", "grimace", "sad", "eyeroll"}
-REACTIONS = {"lean_in", "pop_up", "slump", "shake", "hat_tip", "nod"}
+REACTIONS = {"lean_in", "pop_up", "slump", "shake", "hat_tip", "nod", "bowtie"}
 SEGMENT_IMAGE_DIR = "assets/segments/"
 
 

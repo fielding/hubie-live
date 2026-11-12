@@ -403,6 +403,18 @@
       "source": "pose_arms_up_2.png",
       "scale": 0.995,
       "head_residual": 5.9
+    },
+    "bowtie": {
+      "file": "desk_pose_bowtie.png",
+      "source": "pose_bowtie_1.png",
+      "scale": 0.998,
+      "head_residual": 7.7
+    },
+    "bowtie_tug": {
+      "file": "desk_pose_bowtie_tug.png",
+      "source": "pose_bowtie_tug_2.png",
+      "scale": 0.972,
+      "head_residual": 7.7
     }
   }
 }

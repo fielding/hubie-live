@@ -15,7 +15,7 @@ log = logging.getLogger("brain")
 
 API = "https://api.venice.ai/api/v1/chat/completions"
 EXPRESSIONS = ["neutral", "happy", "laugh", "surprised", "thinking", "focused", "smug", "grimace", "sad", "eyeroll"]
-REACTIONS = ["none", "lean_in", "pop_up", "slump", "shake", "hat_tip", "nod"]
+REACTIONS = ["none", "lean_in", "pop_up", "slump", "shake", "hat_tip", "nod", "bowtie"]
 
 # The persona prompt and model lists live in config.toml (see Config).
 
@@ -186,7 +186,7 @@ class Brain:
         user = (f"Game: {game.title}. What just happened: {json.dumps(event)}. Bets are zero-value, so no money is "
                 f"involved (don't mention credits or balance). Recent: {json.dumps(recent[-6:])}\nReact in one short line (or empty), pick an "
                 "expression and a reaction (pop_up for big wins, slump for painful losses, shake for near "
-                "misses, hat_tip or nod for small wins, none otherwise).")
+                "misses, hat_tip or nod for small wins, bowtie for smug, dapper moments, none otherwise).")
         if event.get("you_just_said"):
             user += (f"\nYou already blurted {json.dumps(event['you_just_said'])} the instant it happened: carry on "
                      "from there in a natural follow-up, don't repeat that exclamation or open with another.")

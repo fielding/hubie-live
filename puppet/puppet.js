@@ -87,7 +87,7 @@
     sad:       { eyes: ['eyes_sad', 'eyes_half'], mouth: ['mouth_frown'], tilt: 1.5, dy: 1.2 },
     eyeroll:   { eyes: ['eyes_roll'], mouth: ['mouth_frown'], tilt: -1.2, dy: -0.4 },
   };
-  const REACTIONS = new Set(['lean_in', 'pop_up', 'slump', 'shake', 'hat_tip', 'nod']);
+  const REACTIONS = new Set(['lean_in', 'pop_up', 'slump', 'shake', 'hat_tip', 'nod', 'bowtie']);
 
   // Rhubarb Lip Sync mouth shapes -> overlays, best first; missing art falls through to the
   // nearest shape, and an empty list means the base face. A: M/B/P, B: K/S/T/EE, C: EH,
@@ -387,6 +387,17 @@
         out.headDeg = 2.8 * Math.sin(2 * Math.PI * 4.5 * tau) * Math.max(0, 1 - tau / 0.9);
         out.done = tau > 0.9;
         break;
+      case 'bowtie': {
+        // Paws up to the bow tie and straighten it: two frames flipped like little tugs, a smug head
+        // tilt, then back to the desk.
+        if (tau > 0.06 && tau < 1.55) out.pose = Math.floor((tau - 0.06) / 0.2) % 2 ? 'bowtie_tug' : 'bowtie';
+        const e = smooth(tau / 0.2) * (1 - smooth((tau - 1.35) / 0.3));
+        out.headDeg = 1.8 * e;
+        out.headDy = -1 * e;
+        out.charScale = 1 + 0.01 * e;
+        out.done = tau > 1.8;
+        break;
+      }
       case 'hat_tip': {
         const e = smooth(tau / 0.25) * (1 - smooth((tau - 0.75) / 0.6));
         out.hatDy = -6 * e;
