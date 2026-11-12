@@ -38,7 +38,8 @@ show going through site outages without a human touching anything.
   - **Downtime:** viewers see a "be right back" card while the site is down.
   - **Crashes:** the runner restarts itself without asking for keys again.
 - **Ad breaks:** about once an hour he throws to a commercial ("we'll be right back after these
-  messages"): a video from `assets/ads/` plays on his monitor with the music off and play paused.
+  messages"): a video from `assets/ads/` starts on his monitor, grows to full screen and settles
+  back, with its sound levelled, the music off and play paused.
 - **Fills the room:** NCS drum and bass that ducks under his voice (the tracks are credited on
   screen and with `!song`), timed ads and reminders, game rotation every 25 minutes when chat is
   quiet, and a "no human input" runtime clock.
