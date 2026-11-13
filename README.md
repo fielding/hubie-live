@@ -152,8 +152,8 @@ Silk was fastest at 3.8 s a clip; MiniMax Speech-02 HD took about 5 s, Gemini 3.
 | `KICK_CLIENT_ID`, `KICK_CLIENT_SECRET` | the Kick bot (chat posts, moderation) |
 | `OBS_WS_PASSWORD` | auto-clips |
 
-**Not tied to Venice.** I built this on Venice because I work there and had the credits, not because
-Hubie needs it. The brain and the voice use the standard OpenAI-style endpoints (`/chat/completions`
+**Not tied to Venice.** I built this on Venice because I work there and Venice is awesome! Hubie
+doesn't need it, though. The brain and the voice use the standard OpenAI-style endpoints (`/chat/completions`
 in `showrunner/brain.py`, `/audio/speech` in `puppet/tts.py`), so any OpenAI-compatible provider
 works: point the `API` constant in each file at its endpoint, put its key in `VENICE_API_KEY` (only the
 name is Venice's), and set its model ids in `config.toml` `[models]` and its voice in `tts.py`. The one Venice-specific piece is the safety classifier
