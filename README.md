@@ -140,7 +140,7 @@ Silk was fastest at 3.8 s a clip; MiniMax Speech-02 HD took about 5 s, Gemini 3.
 
 - macOS (window capture and the screen watchdog use macOS APIs), Python 3.13 with
   [uv](https://docs.astral.sh/uv/), ffmpeg, Google Chrome, OBS 28+.
-- A [Venice](https://venice.ai) API key (LLM, TTS, safety classifier, image edits).
+- A [Venice](https://venice.ai) API key (LLM, TTS, safety classifier), or another provider (see below).
 - [Rhubarb Lip Sync](https://github.com/DanielSWolf/rhubarb-lip-sync) in `tools/` for lip sync (optional:
   without it the mouth follows loudness).
 - Optional: a Kick app (client id/secret) and a bot account for chat replies and moderation; an
@@ -148,9 +148,17 @@ Silk was fastest at 3.8 s a clip; MiniMax Speech-02 HD took about 5 s, Gemini 3.
 
 | Environment variable | Needed for |
 |---|---|
-| `VENICE_API_KEY` | everything (brain, voice, safety, image edits) |
+| `VENICE_API_KEY` | the brain, voice and safety checks |
 | `KICK_CLIENT_ID`, `KICK_CLIENT_SECRET` | the Kick bot (chat posts, moderation) |
 | `OBS_WS_PASSWORD` | auto-clips |
+
+**Not tied to Venice.** I built this on Venice because I work there and had the credits, not because
+Hubie needs it. The brain and the voice use the standard OpenAI-style endpoints (`/chat/completions`
+in `showrunner/brain.py`, `/audio/speech` in `puppet/tts.py`), so any OpenAI-compatible provider
+works: point the `API` constant in each file at its endpoint, put its key in `VENICE_API_KEY` (only the
+name is Venice's), and set its model ids in `config.toml` `[models]` and its voice in `tts.py`. The one Venice-specific piece is the safety classifier
+(`showrunner/safety.py`, Venice's `/decisions` endpoint). Its regex rules for injection and abuse
+work anywhere; the model-scored check would need another moderation API or an LLM call in its place.
 
 ## Run
 
