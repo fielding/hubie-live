@@ -22,12 +22,15 @@ class GameRegistry:
         """Import new modules and re-import changed ones. Returns the game ids that changed.
         A module that fails to import is logged and its previous version kept."""
         changed = []
-        for info in pkgutil.iter_modules([str(PKG)]):
-            if info.name.startswith("_") or info.name == "base":
-                continue
-            path = PKG / f"{info.name}.py"
-            mtime = path.stat().st_mtime
-            if self._mtimes.get(info.name) == mtime:
+        infos = [i for i in pkgutil.iter_modules([str(PKG)]) if not i.name.startswith("_") and i.name != "base"]
+        mtimes = {i.name: (PKG / f"{i.name}.py").stat().st_mtime for i in infos}
+        # Reloading a shared module (housebets.py) rebinds its classes, SiteError among them, while the
+        # plugins built on it keep the old ones: their `except SiteError` then stops matching what the
+        # base raises. So any change reloads every module, in name order (housebets before housebets_*).
+        stale = any(self._mtimes.get(n) != m for n, m in mtimes.items())
+        for info in infos:
+            mtime = mtimes[info.name]
+            if not stale:
                 continue
             try:
                 name = f"{__name__}.{info.name}"

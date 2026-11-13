@@ -157,6 +157,7 @@ class HousebetsGame(Game):
                 return await self.until(read, check, what, timeout=first_wait if attempt < 2 else SETTLE_TIMEOUT_S)
             except SiteError:
                 if attempt == 2:
+                    await self.snapshot_page(f"{what} never registered after 3 clicks on {selector}")
                     raise
 
     async def act(self, action: dict) -> dict:

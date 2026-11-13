@@ -730,12 +730,16 @@ class Runner:
             await self.puppet.reaction(self._default_reaction(ev))
             # One line per round: a bust right after his run line got said just gets a face (unless the
             # run was huge); a cash-out (the payoff) always gets its line once it's big.
+            # A run of small rounds never reaches the line (Hi-Lo talks from 10x): past twice the quiet
+            # limit any result gets one, or he sat silent for minutes on 2026-11-13.
+            quiet_for = time.time() - self._last_line_at
+            quiet = cfg.max_quiet_seconds and quiet_for > cfg.max_quiet_seconds
+            dead_air = cfg.max_quiet_seconds and quiet_for > cfg.max_quiet_seconds * 2
             if ev["kind"] != "bust":
-                return await self._fast_result(g, ev, big=float(ev.get("multiplier") or 0) >= tfx)
+                return await self._fast_result(g, ev, big=float(ev.get("multiplier") or 0) >= tfx or dead_air)
             # On a hot board a bust just past the line (8x on 16 mines) happens every round, and a line
             # on each one became "8x and I got greedy" on repeat: a bust needs a real run (or quiet air).
-            quiet = cfg.max_quiet_seconds and time.time() - self._last_line_at > cfg.max_quiet_seconds
-            return await self._fast_result(g, ev, big=peak >= tfx * 2 or (peak >= tfx and quiet),
+            return await self._fast_result(g, ev, big=peak >= tfx * 2 or (peak >= tfx and quiet) or dead_air,
                                            unless=None if peak >= tfx * 4 else run_talk)
 
     async def _fast_result(self, g, ev: dict, big: bool, unless: asyncio.Task | None = None):
