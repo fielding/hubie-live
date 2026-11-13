@@ -89,8 +89,8 @@ For local testing, `window.hubie` exposes `say({...})`, `stop()`, `expression(na
 
 ## How the rig works
 
-Assets live in `assets/desk/layers/`, all on the source image's 1312x1199 canvas. They were made by
-the Nettie project (the scripts named below live there, not in this repo):
+Assets live in `assets/desk/layers/`, all on the source image's 1312x1199 canvas. They were made with
+Nettie, my own separate puppet-building project (the scripts named below live there, not in this repo):
 
 | File | What it is |
 |---|---|

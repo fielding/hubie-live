@@ -252,8 +252,8 @@ the HUD and `!song` can credit each one.
 - **Voice:** ElevenLabs Turbo v2.5, voice "Theo Silk", through Venice.
 - **Animation:** our own Canvas 2D puppet; [Rhubarb Lip Sync](https://github.com/DanielSWolf/rhubarb-lip-sync)
   for mouth shapes; face parts and poses generated from the official Hubie art with Venice image edits
-  (Flux) and cut into layers. The tools that made them live in the separate Nettie project; this repo keeps only
-  the finished layers.
+  (Flux) and cut into layers with Nettie, my own puppet-building tool, kept as a separate private
+  project; this repo keeps only the finished layers.
 - **Streaming:** OBS (browser sources + window capture, replay buffer) to Kick; Kick official API for the bot.
 - **Plumbing:** Python 3.13 (asyncio, websockets, httpx), a Chrome MV3 extension, ffmpeg, pyobjc (Quartz).
 - **Music:** NoCopyrightSounds (credited on stream).
@@ -279,7 +279,7 @@ the HUD and `!song` can credit each one.
 - **Viewer data:** each viewer's chat with Hubie is kept in `showrunner/.viewers.json` on the streaming
   machine only (gitignored, last 30 lines per viewer, longest-quiet viewers dropped past 300).
 - **AI assets:** the desk scene, face parts and poses were generated with Venice image models
-  from the official Hubie art. The generation and cutting pipeline is a separate project (Nettie);
-  only its output, `assets/desk/layers/`, ships here.
-- **Videos:** the demo clips and the ad are made in a separate project (hubie-studio), which plays
+  from the official Hubie art. The generation and cutting pipeline is Nettie, a separate
+  project of mine (not a third-party tool); only its output, `assets/desk/layers/`, ships here.
+- **Videos:** the demo clips and the ad are made in hubie-studio, another separate project of mine, which plays
   scripted scenes on this repo's puppet and room art and records them.
