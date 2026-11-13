@@ -19,7 +19,7 @@ The page must be served over HTTP, not opened as a `file://` URL: it fetches its
 ### Tests
 
 ```sh
-uv run --with playwright --with pillow python puppet/shoot.py    # screenshots -> puppet/screenshots/
+uv run --with playwright --with pillow python puppet/shoot.py    # screenshots -> puppet/screenshots/ (gitignored)
 uv run --with playwright python puppet/soak.py --minutes 30      # soak -> puppet/soak/results.json
 ```
 
@@ -89,7 +89,8 @@ For local testing, `window.hubie` exposes `say({...})`, `stop()`, `expression(na
 
 ## How the rig works
 
-Assets live in `assets/desk/layers/`, all on the source image's 1312x1199 canvas:
+Assets live in `assets/desk/layers/`, all on the source image's 1312x1199 canvas. They were made by
+the Nettie project (the scripts named below live there, not in this repo):
 
 | File | What it is |
 |---|---|
@@ -100,11 +101,11 @@ Assets live in `assets/desk/layers/`, all on the source image's 1312x1199 canvas
 | `desk_manifest.json` | Layer order, pivots, overlay bboxes and desk geometry |
 
 | `desk_pose_<name>.png` | Alternate body layers cut by `cut_poses.py` from generated pose edits, aligned to the rig's head: `hands_behind_head` (used by `slump`) and `arms_up` (used by `pop_up`). The rig's own head, face overlays and hat are drawn on top |
-| `desk_scene_back.png`, `desk_scene_front.png` | The desk scene, composed by `assets/desk/props/build_desk.py` from the prop art in `assets/desk/props/src/`: desk, mat, keyboard and mouse behind his hands, and mug, figurine, books and mic in front |
+| `desk_scene_back.png`, `desk_scene_front.png` | The desk scene, composed by `build_desk.py` (Nettie) from separate prop art: desk, mat, keyboard and mouse behind his hands, and mug, figurine, books and mic in front |
 
 Draw order per frame: torso (clipped at the desk's back edge), the desk with mat, keyboard and mouse, arms (between the desk's back edge and its front face), head with eyes overlay, mouth overlay and hat, then the desk's front face again and the props in front. The desk never moves.
 
-The keyboard and mouse were generated in a normal user's-side view and rotated 180° by `build_desk.py`, because Hubie sits across the desk from the viewer. To move or swap a prop, edit `LAYOUT` in `build_desk.py` and rerun it.
+The keyboard and mouse were generated in a normal user's-side view and rotated 180° by `build_desk.py`, because Hubie sits across the desk from the viewer. To move or swap a prop, edit `LAYOUT` in Nettie's `build_desk.py`, rerun it, and copy the new scene layers here.
 
 Motion stays inside what the fills cover: head ±4px and ±3°, hat ±6px and ±4° relative to the head (soft-limited). Whole-character reactions move body, head and hat together. Reactions that move him far swap the body layer first, so his hands are off the desk before he moves: `slump` puts his hands behind his head, then sinks, rises and snaps back onto the keyboard, and `pop_up` throws both paws in the air for the jump. Each swap has a small squash so it reads as a cartoon pose snap. If a pose image is missing, the hands slide back over the desk's back edge instead.
 

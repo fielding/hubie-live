@@ -80,7 +80,7 @@
     laugh:     { eyes: ['eyes_happy', 'eyes_closed'], mouth: ['mouth_laugh', 'mouth_open', 'mouth_mid'], tilt: -0.6, dy: -1, chuckle: true },
     surprised: { eyes: ['eyes_wide'], mouth: ['mouth_oo', 'mouth_mid'], tilt: 0, dy: -1.5, hatPop: true },
     thinking:  { eyes: [CFG.look === 'right' ? 'eyes_look_right' : 'eyes_look_left'], mouth: [], tilt: CFG.look === 'right' ? 2.0 : -2.0, dy: 0.5 },
-    // 2026-11-08 (tools/gen_faces.py): faces for long stretches of fast play.
+    // 2026-11-08 (Nettie gen_faces.py): faces for long stretches of fast play.
     focused:   { eyes: ['eyes_squint'], mouth: ['mouth_smirk'], tilt: 0.6, dy: 0.4 },
     smug:      { eyes: ['eyes_half'], mouth: ['mouth_smirk'], tilt: -0.8, dy: -0.3 },
     grimace:   { eyes: ['eyes_squint'], mouth: ['mouth_grimace', 'mouth_B'], tilt: 1.2, dy: 0.6 },
@@ -249,7 +249,7 @@
   }
 
   // ---------------------------------------------------------------- desk geometry
-  // The desk scene is two prebuilt images (assets/desk/props/build_desk.py) placed in
+  // The desk scene is two prebuilt images (Nettie build_desk.py) placed in
   // Hubie's source coordinates; values are refreshed from the manifest. It never moves.
   const DESK = {
     x: -482.98, y: -640.15, scale: 2.778,      // scene image origin and px scale, in source coords

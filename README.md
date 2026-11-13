@@ -1,5 +1,7 @@
 # Hubie Streamer
 
+<p align="center"><img src="assets/readme/hubie_desk.png" alt="Hubie the sloth at his streaming desk" width="560"></p>
+
 Hubie is a dapper sloth in a top hat who streams casino house games on Kick, fully on his own, 24/7.
 He plays the real [Housebets](https://www.housebets.com) originals in a Chrome window (every bet is
 $0, checked before each click), talks with an AI voice, trash-talks chat, takes votes, and keeps the
@@ -242,7 +244,8 @@ the HUD and `!song` can credit each one.
 - **Voice:** ElevenLabs Turbo v2.5, voice "Theo Silk", through Venice.
 - **Animation:** our own Canvas 2D puppet; [Rhubarb Lip Sync](https://github.com/DanielSWolf/rhubarb-lip-sync)
   for mouth shapes; face parts and poses generated from the official Hubie art with Venice image edits
-  (Flux), cut into layers by `assets/desk/layers/cut_faces.py`.
+  (Flux) and cut into layers. The tools that made them live in the separate Nettie project; this repo keeps only
+  the finished layers.
 - **Streaming:** OBS (browser sources + window capture, replay buffer) to Kick; Kick official API for the bot.
 - **Plumbing:** Python 3.13 (asyncio, websockets, httpx), a Chrome MV3 extension, ffmpeg, pyobjc (Quartz).
 - **Music:** NoCopyrightSounds (credited on stream).
@@ -268,8 +271,7 @@ the HUD and `!song` can credit each one.
 - **Viewer data:** each viewer's chat with Hubie is kept in `showrunner/.viewers.json` on the streaming
   machine only (gitignored, last 30 lines per viewer, longest-quiet viewers dropped past 300).
 - **AI assets:** the desk scene, face parts and poses were generated with Venice image models
-  from the official Hubie art (`Dapper Sloth at the Desk.png` is the concept the scene is built on).
-  `tools/gen_faces.py` and `tools/gen_poses.py` make new face parts and body poses the same way.
-- **Demo and ad tools (`demo/`):** `render_script.py` pre-voices a scripted scene, `export.py` records
-  the stage playing it to an MP4 (with camera moves, headlines and captions in ad mode), and
-  `demo/ad/pull_clips.py` cuts moments out of the channel's Kick VODs by clock time.
+  from the official Hubie art. The generation and cutting pipeline is a separate project (Nettie);
+  only its output, `assets/desk/layers/`, ships here.
+- **Videos:** the demo clips and the ad are made in a separate project (hubie-studio), which plays
+  scripted scenes on this repo's puppet and room art and records them.

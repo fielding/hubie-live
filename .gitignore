@@ -2,8 +2,6 @@
 puppet/.cache/
 __pycache__/
 tools/rhubarb*/
-demo/out/
-demo/footage/
 showrunner/.state.json
 showrunner/.admin_token
 .handoff
@@ -15,15 +13,10 @@ assets/music/*
 assets/music_off/
 .DS_Store
 .tix/
-# Raw AI image candidates (~250 MB): regenerable with tools/gen_faces.py; the final cut layers are in
-# assets/desk/layers. Keep the inputs, masks, picks and request log needed to rebuild them.
-assets/desk/edits/*.png
-!assets/desk/edits/_input_white.png
-!assets/desk/edits/_mask_*.png
-assets/desk/edits/probe/
 showrunner/.viewers.json
 assets/ads/*
 !assets/ads/README.md
 showrunner/.config.last-good.toml
-demo/ad/monitor.mp4
-demo/ad/clips/
+
+# puppet/shoot.py debug captures
+puppet/screenshots/
