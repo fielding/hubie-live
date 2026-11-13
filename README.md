@@ -158,7 +158,8 @@ in `showrunner/brain.py`, `/audio/speech` in `puppet/tts.py`), so any OpenAI-com
 works: point the `API` constant in each file at its endpoint, put its key in `VENICE_API_KEY` (only the
 name is Venice's), and set its model ids in `config.toml` `[models]` and its voice in `tts.py`. The one Venice-specific piece is the safety classifier
 (`showrunner/safety.py`, Venice's `/decisions` endpoint). Its regex rules for injection and abuse
-work anywhere; the model-scored check would need another moderation API or an LLM call in its place.
+work anywhere; for the model-scored check, swap in another fast "System 1" classifier model like
+Venice's jev (a small, quick model that scores each message), or a moderation API.
 
 ## Run
 
